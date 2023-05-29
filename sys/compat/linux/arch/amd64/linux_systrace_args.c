@@ -1,4 +1,4 @@
-/* $NetBSD: linux_systrace_args.c,v 1.20 2021/12/02 04:39:44 ryo Exp $ */
+/* $NetBSD$ */
 
 /*
  * System call argument to DTrace register array conversion.
@@ -1916,7 +1916,7 @@ systrace_args(register_t sysnum, const void *params, uintptr_t *uarg, size_t *n_
 		break;
 	}
 	/* linux_sys_nosys */
-	case 314: {
+	case 451: {
 		*n_args = 0;
 		break;
 	}
@@ -5119,7 +5119,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 		};
 		break;
 	/* linux_sys_nosys */
-	case 314:
+	case 451:
 		break;
 	default:
 		break;
@@ -6225,7 +6225,7 @@ systrace_return_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 		break;
 	/* linux_sys_nosys */
-	case 314:
+	case 451:
 	default:
 		break;
 	};
