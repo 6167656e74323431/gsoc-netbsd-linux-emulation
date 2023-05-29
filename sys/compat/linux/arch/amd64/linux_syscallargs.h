@@ -1126,6 +1126,8 @@ struct linux_sys_sendmmsg_args {
 };
 check_syscall_args(linux_sys_sendmmsg)
 
+struct sys_getrandom_args;
+
 /*
  * System call prototypes.
  */
@@ -1594,6 +1596,8 @@ int	linux_sys_recvmmsg(struct lwp *, const struct linux_sys_recvmmsg_args *, reg
 int	linux_sys_prlimit64(struct lwp *, const struct linux_sys_prlimit64_args *, register_t *);
 
 int	linux_sys_sendmmsg(struct lwp *, const struct linux_sys_sendmmsg_args *, register_t *);
+
+int	sys_getrandom(struct lwp *, const struct sys_getrandom_args *, register_t *);
 
 int	linux_sys_nosys(struct lwp *, const void *, register_t *);
 

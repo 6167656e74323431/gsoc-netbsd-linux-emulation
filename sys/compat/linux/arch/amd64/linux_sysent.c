@@ -1410,8 +1410,10 @@ struct sysent linux_sysent[] = {
 		.sy_call = linux_sys_nosys,
 	},		/* 317 = filler */
 	{
-		.sy_call = linux_sys_nosys,
-	},		/* 318 = filler */
+		ns(struct sys_getrandom_args),
+		.sy_flags = SYCALL_ARG_PTR,
+		.sy_call = (sy_call_t *)sys_getrandom
+	},		/* 318 = getrandom */
 	{
 		.sy_call = linux_sys_nosys,
 	},		/* 319 = filler */

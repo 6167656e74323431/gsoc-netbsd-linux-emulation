@@ -571,7 +571,8 @@
 315	UNIMPL		sched_getattr
 316	UNIMPL		renameat2
 317	UNIMPL		seccomp
-318	UNIMPL		getrandom
+318     NOARGS		{ ssize_t|sys||getrandom(void *buf, size_t buflen, \
+			    unsigned int flags); }
 319	UNIMPL		memfd_create
 320	UNIMPL		kexec_file_load
 321	UNIMPL		bpf

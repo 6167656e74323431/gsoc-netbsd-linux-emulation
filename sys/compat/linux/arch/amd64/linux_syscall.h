@@ -702,6 +702,9 @@
 /* syscall: "sendmmsg" ret: "int" args: "int" "struct linux_mmsghdr *" "unsigned int" "unsigned int" */
 #define	LINUX_SYS_sendmmsg	307
 
+/* syscall: "getrandom" ret: "ssize_t" args: "void *" "size_t" "unsigned int" */
+#define	LINUX_SYS_getrandom	318
+
 /* syscall: "nosys" ret: "int" args: */
 #define	LINUX_SYS_nosys	451
 
