@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_misc.c,v 1.256 2021/12/02 04:29:48 ryo Exp $	*/
+/*	$NETBSD200: linux_misc.c,v 1.256 2021/12/02 04:29:48 ryo Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998, 1999, 2008 The NetBSD Foundation, Inc.
@@ -267,6 +267,70 @@ linux_sys_wait4(struct lwp *l, const struct linux_sys_wait4_args *uap, register_
 	if (error == 0 && SCARG(uap, status) != NULL) {
 		status = bsd_to_linux_wstat(status);
 		error = copyout(&status, SCARG(uap, status), sizeof status);
+	}
+
+	return error;
+}
+
+/*
+ * waitid(2).  Converting arguments to the NetBSD equivalent and
+ * calling it.
+ */
+int
+linux_sys_waitid(struct lwp *l, const struct linux_sys_waitid_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) idtype;
+		syscallarg(id_t) id;
+		syscallarg(linux_siginfo_t *) info;
+		syscallarg(int) options;
+	} */
+	int error, linux_options, options, linux_idtype, pid, status;
+	idtype_t idtype;
+	id_t id;
+	siginfo_t info;
+	linux_siginfo_t linux_info;
+	struct wrusage wru;
+
+	linux_idtype = SCARG(uap, idtype);
+	switch (linux_idtype) {
+	case LINUX_P_ALL:
+		idtype = P_ALL;
+		break;
+	case LINUX_P_PID:
+		idtype = P_PID;
+		break;
+	case LINUX_P_PGID:
+		idtype = P_PGID;
+		break;
+	default:
+		return EINVAL;
+	}
+
+	linux_options = SCARG(uap, options);
+	if (linux_options & ~(LINUX_WAITID_KNOWNFLAGS))
+		return EINVAL;
+
+	options = 0;
+	if (linux_options & LINUX_WNOHANG)
+		options |= WNOHANG;
+	if (linux_options & LINUX_WUNTRACED)
+		options |= WUNTRACED;
+	if (linux_options & LINUX_WEXITED)
+		options |= WEXITED;
+	if (linux_options & LINUX_WCONTINUED)
+		options |= WCONTINUED;
+	if (linux_options & LINUX_WALL)
+		options |= WALLSIG;
+	if (linux_options & LINUX_WCLONE)
+		options |= WALTSIG;
+
+	id = SCARG(uap, id);
+
+	error = do_sys_waitid(idtype, id, &pid, &status, options, &wru, &info);
+        if (error == 0) {
+		native_to_linux_siginfo(&linux_info, &info._info);
+		error = copyout(&linux_info, SCARG(uap, info), sizeof(linux_info));
 	}
 
 	return error;

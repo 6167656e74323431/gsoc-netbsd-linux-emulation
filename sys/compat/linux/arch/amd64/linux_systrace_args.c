@@ -1618,6 +1618,16 @@ systrace_args(register_t sysnum, const void *params, uintptr_t *uarg, size_t *n_
 		*n_args = 2;
 		break;
 	}
+	/* linux_sys_waitid */
+	case 247: {
+		const struct linux_sys_waitid_args *p = params;
+		iarg[0] = SCARG(p, idtype); /* int */
+		iarg[1] = SCARG(p, id); /* id_t */
+		uarg[2] = (intptr_t) SCARG(p, info); /* linux_siginfo_t * */
+		iarg[3] = SCARG(p, options); /* int */
+		*n_args = 4;
+		break;
+	}
 	/* linux_sys_openat */
 	case 257: {
 		const struct linux_sys_openat_args *p = params;
@@ -4577,6 +4587,25 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			break;
 		};
 		break;
+	/* linux_sys_waitid */
+	case 247:
+		switch(ndx) {
+		case 0:
+			p = "int";
+			break;
+		case 1:
+			p = "id_t";
+			break;
+		case 2:
+			p = "linux_siginfo_t *";
+			break;
+		case 3:
+			p = "int";
+			break;
+		default:
+			break;
+		};
+		break;
 	/* linux_sys_openat */
 	case 257:
 		switch(ndx) {
@@ -6091,6 +6120,11 @@ systrace_return_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 		break;
 	/* compat_50_sys_utimes */
 	case 235:
+		if (ndx == 0 || ndx == 1)
+			p = "int";
+		break;
+	/* linux_sys_waitid */
+	case 247:
 		if (ndx == 0 || ndx == 1)
 			p = "int";
 		break;

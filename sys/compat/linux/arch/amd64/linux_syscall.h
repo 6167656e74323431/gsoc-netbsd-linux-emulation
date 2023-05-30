@@ -609,6 +609,9 @@
 /* syscall: "utimes" ret: "int" args: "const char *" "const struct timeval50 *" */
 #define	LINUX_SYS_utimes	235
 
+/* syscall: "waitid" ret: "int" args: "int" "id_t" "linux_siginfo_t *" "int" */
+#define	LINUX_SYS_waitid	247
+
 /* syscall: "openat" ret: "int" args: "int" "const char *" "int" "..." */
 #define	LINUX_SYS_openat	257
 

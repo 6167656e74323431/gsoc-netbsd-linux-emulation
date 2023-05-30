@@ -313,7 +313,7 @@ const char *const linux_syscallnames[] = {
 	/* 244 */	"#244 (unimplemented mq_notify)",
 	/* 245 */	"#245 (unimplemented mq_getsetattr)",
 	/* 246 */	"#246 (unimplemented kexec_load)",
-	/* 247 */	"#247 (unimplemented waitid)",
+	/* 247 */	"waitid",
 	/* 248 */	"#248 (unimplemented add_key)",
 	/* 249 */	"#249 (unimplemented request_key)",
 	/* 250 */	"#250 (unimplemented keyctl)",
@@ -857,7 +857,7 @@ const char *const altlinux_syscallnames[] = {
 	/* 244 */	NULL, /* unimplemented mq_notify */
 	/* 245 */	NULL, /* unimplemented mq_getsetattr */
 	/* 246 */	NULL, /* unimplemented kexec_load */
-	/* 247 */	NULL, /* unimplemented waitid */
+	/* 247 */	NULL, /* waitid */
 	/* 248 */	NULL, /* unimplemented add_key */
 	/* 249 */	NULL, /* unimplemented request_key */
 	/* 250 */	NULL, /* unimplemented keyctl */
