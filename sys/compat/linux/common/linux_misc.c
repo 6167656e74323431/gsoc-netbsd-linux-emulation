@@ -1,4 +1,4 @@
-/*	$NETBSD200: linux_misc.c,v 1.256 2021/12/02 04:29:48 ryo Exp $	*/
+/*	$NETBSD: linux_misc.c,v 1.256 2021/12/02 04:29:48 ryo Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998, 1999, 2008 The NetBSD Foundation, Inc.
@@ -179,7 +179,7 @@ static void linux_to_bsd_mmap_args(struct sys_mmap_args *,
     const struct linux_sys_mmap_args *);
 static int linux_mmap(struct lwp *, const struct linux_sys_mmap_args *,
     register_t *, off_t);
-
+static int linux_to_native_wait_options(int);
 
 /*
  * The information on a terminated (or stopped) process needs
@@ -228,19 +228,9 @@ linux_sys_wait4(struct lwp *l, const struct linux_sys_wait4_args *uap, register_
 	if (linux_options & ~(LINUX_WAIT4_KNOWNFLAGS))
 		return (EINVAL);
 
-	options = 0;
-	if (linux_options & LINUX_WAIT4_WNOHANG)
-		options |= WNOHANG;
-	if (linux_options & LINUX_WAIT4_WUNTRACED)
-		options |= WUNTRACED;
-	if (linux_options & LINUX_WAIT4_WCONTINUED)
-		options |= WCONTINUED;
-	if (linux_options & LINUX_WAIT4_WALL)
-		options |= WALLSIG;
-	if (linux_options & LINUX_WAIT4_WCLONE)
-		options |= WALTSIG;
+	options = linux_to_native_wait_options(linux_options);
 # ifdef DIAGNOSTIC
-	if (linux_options & LINUX_WAIT4_WNOTHREAD)
+	if (linux_options & LINUX_WNOTHREAD)
 		printf("WARNING: %s: linux process %d.%d called "
 		       "waitpid with __WNOTHREAD set!\n",
 		       __FILE__, l->l_proc->p_pid, l->l_lid);
@@ -311,20 +301,7 @@ linux_sys_waitid(struct lwp *l, const struct linux_sys_waitid_args *uap, registe
 	if (linux_options & ~(LINUX_WAITID_KNOWNFLAGS))
 		return EINVAL;
 
-	options = 0;
-	if (linux_options & LINUX_WNOHANG)
-		options |= WNOHANG;
-	if (linux_options & LINUX_WUNTRACED)
-		options |= WUNTRACED;
-	if (linux_options & LINUX_WEXITED)
-		options |= WEXITED;
-	if (linux_options & LINUX_WCONTINUED)
-		options |= WCONTINUED;
-	if (linux_options & LINUX_WALL)
-		options |= WALLSIG;
-	if (linux_options & LINUX_WCLONE)
-		options |= WALTSIG;
-
+	options = linux_to_native_wait_options(linux_options);
 	id = SCARG(uap, id);
 
 	error = do_sys_waitid(idtype, id, &pid, &status, options, &wru, &info);
@@ -334,6 +311,33 @@ linux_sys_waitid(struct lwp *l, const struct linux_sys_waitid_args *uap, registe
 	}
 
 	return error;
+}
+
+/*
+ * Convert the opttions argument for wait4(2) and waitid(2) from what
+ * Linux wants to what NetBSD wants.
+ */
+static int
+linux_to_native_wait_options(int linux_options)
+{
+	int options = 0;
+
+	if (linux_options & LINUX_WNOHANG)
+		options |= WNOHANG;
+	if (linux_options & LINUX_WUNTRACED)
+		options |= WUNTRACED;
+	if (linux_options & LINUX_WEXITED)
+		options |= WEXITED;
+	if (linux_options & LINUX_WCONTINUED)
+		options |= WCONTINUED;
+	if (linux_options & LINUX_WNOWAIT)
+		options |= WNOWAIT;
+	if (linux_options & LINUX_WALL)
+		options |= WALLSIG;
+	if (linux_options & LINUX_WCLONE)
+		options |= WALTSIG;
+
+	return options;
 }
 
 /*

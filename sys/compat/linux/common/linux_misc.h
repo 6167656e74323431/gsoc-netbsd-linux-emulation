@@ -33,22 +33,8 @@
 #define _LINUX_MISC_H
 
 /*
- * Options passed to the Linux wait4() system call.
+ * Options passed to the Linux wait4() and waitid() system calls.
  */
-#define LINUX_WAIT4_WNOHANG	0x00000001
-#define LINUX_WAIT4_WUNTRACED	0x00000002
-#define LINUX_WAIT4_WCONTINUED	0x00000008
-#define LINUX_WAIT4_WNOTHREAD	0x20000000
-#define LINUX_WAIT4_WALL	0x40000000
-#define LINUX_WAIT4_WCLONE	0x80000000
-
-#define LINUX_WAIT4_KNOWNFLAGS (LINUX_WAIT4_WNOHANG | \
-                                LINUX_WAIT4_WUNTRACED | \
-                                LINUX_WAIT4_WCONTINUED | \
-                                LINUX_WAIT4_WNOTHREAD | \
-                                LINUX_WAIT4_WALL | \
-                                LINUX_WAIT4_WCLONE)
-
 #define LINUX_WNOHANG		0x00000001
 #define LINUX_WUNTRACED		0x00000002
 #define LINUX_WEXITED		0x00000004
@@ -57,6 +43,13 @@
 #define LINUX_WNOTHREAD		0x20000000
 #define LINUX_WALL		0x40000000
 #define LINUX_WCLONE		0x80000000
+
+#define LINUX_WAIT4_KNOWNFLAGS (LINUX_WNOHANG | \
+                                LINUX_WUNTRACED | \
+                                LINUX_WCONTINUED | \
+                                LINUX_WNOTHREAD | \
+                                LINUX_WALL | \
+                                LINUX_WCLONE)
 
 #define LINUX_WAITID_KNOWNFLAGS (LINUX_WNOHANG | \
 				 LINUX_WEXITED | \
