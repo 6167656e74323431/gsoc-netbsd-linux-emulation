@@ -925,7 +925,7 @@ struct compat_50_sys_utimes_args;
 struct linux_sys_waitid_args {
 	syscallarg(int) idtype;
 	syscallarg(id_t) id;
-	syscallarg(linux_siginfo_t *) info;
+	syscallarg(linux_siginfo_t *) infop;
 	syscallarg(int) options;
 	syscallarg(struct rusage50 *) rusage;
 };

@@ -1623,7 +1623,7 @@ systrace_args(register_t sysnum, const void *params, uintptr_t *uarg, size_t *n_
 		const struct linux_sys_waitid_args *p = params;
 		iarg[0] = SCARG(p, idtype); /* int */
 		iarg[1] = SCARG(p, id); /* id_t */
-		uarg[2] = (intptr_t) SCARG(p, info); /* linux_siginfo_t * */
+		uarg[2] = (intptr_t) SCARG(p, infop); /* linux_siginfo_t * */
 		iarg[3] = SCARG(p, options); /* int */
 		uarg[4] = (intptr_t) SCARG(p, rusage); /* struct rusage50 * */
 		*n_args = 5;

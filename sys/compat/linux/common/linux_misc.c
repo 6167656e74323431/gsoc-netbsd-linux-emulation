@@ -272,7 +272,7 @@ linux_sys_waitid(struct lwp *l, const struct linux_sys_waitid_args *uap, registe
 	/* {
 		syscallarg(int) idtype;
 		syscallarg(id_t) id;
-		syscallarg(linux_siginfo_t *) info;
+		syscallarg(linux_siginfo_t *) infop;
 		syscallarg(int) options;
 		syscallarg(struct rusage50 *) rusage;
 	} */
@@ -310,7 +310,7 @@ linux_sys_waitid(struct lwp *l, const struct linux_sys_waitid_args *uap, registe
 
 	if (error == 0) {
 		native_to_linux_siginfo(&linux_info, &info._info);
-		error = copyout(&linux_info, SCARG(uap, info), sizeof(linux_info));
+		error = copyout(&linux_info, SCARG(uap, infop), sizeof(linux_info));
 	}
 
 	if (error == 0 && SCARG(uap, rusage) != NULL) {
