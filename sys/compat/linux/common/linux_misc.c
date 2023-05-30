@@ -308,7 +308,8 @@ linux_sys_waitid(struct lwp *l, const struct linux_sys_waitid_args *uap, registe
 
 	error = do_sys_waitid(idtype, id, &pid, &status, options, &wru, &info);
 
-	if (error == 0) {
+	if (error == 0 && SCARG(uap, infop) != NULL) {
+		/* POSIX says that this NULL check is a bug, but Linux does this. */
 		native_to_linux_siginfo(&linux_info, &info._info);
 		error = copyout(&linux_info, SCARG(uap, infop), sizeof(linux_info));
 	}
