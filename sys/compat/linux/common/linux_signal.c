@@ -845,7 +845,7 @@ native_to_linux_si_status(int code, int status)
 		sts = LINUX_SIGCONT;
 		break;
 	case CLD_EXITED:
-		sts = WEXITSTATUS(status);
+		sts = status;
 		break;
 	case CLD_STOPPED:
 	case CLD_TRAPPED:
