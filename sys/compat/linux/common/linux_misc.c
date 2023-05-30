@@ -274,6 +274,7 @@ linux_sys_waitid(struct lwp *l, const struct linux_sys_waitid_args *uap, registe
 		syscallarg(id_t) id;
 		syscallarg(linux_siginfo_t *) info;
 		syscallarg(int) options;
+		syscallarg(struct rusage50 *) rusage;
 	} */
 	int error, linux_options, options, linux_idtype, pid, status;
 	idtype_t idtype;
@@ -281,6 +282,7 @@ linux_sys_waitid(struct lwp *l, const struct linux_sys_waitid_args *uap, registe
 	siginfo_t info;
 	linux_siginfo_t linux_info;
 	struct wrusage wru;
+	struct rusage50 ru50;
 
 	linux_idtype = SCARG(uap, idtype);
 	switch (linux_idtype) {
@@ -305,9 +307,15 @@ linux_sys_waitid(struct lwp *l, const struct linux_sys_waitid_args *uap, registe
 	id = SCARG(uap, id);
 
 	error = do_sys_waitid(idtype, id, &pid, &status, options, &wru, &info);
-        if (error == 0) {
+
+	if (error == 0) {
 		native_to_linux_siginfo(&linux_info, &info._info);
 		error = copyout(&linux_info, SCARG(uap, info), sizeof(linux_info));
+	}
+
+	if (error == 0 && SCARG(uap, rusage) != NULL) {
+		rusage_to_rusage50(&wru.wru_children, &ru50);
+		error = copyout(&ru50, SCARG(uap, rusage), sizeof(ru50));
 	}
 
 	return error;

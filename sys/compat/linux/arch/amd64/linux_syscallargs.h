@@ -927,6 +927,7 @@ struct linux_sys_waitid_args {
 	syscallarg(id_t) id;
 	syscallarg(linux_siginfo_t *) info;
 	syscallarg(int) options;
+	syscallarg(struct rusage50 *) rusage;
 };
 check_syscall_args(linux_sys_waitid)
 

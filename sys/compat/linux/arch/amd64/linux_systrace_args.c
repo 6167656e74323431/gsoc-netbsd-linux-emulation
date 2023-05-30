@@ -1625,7 +1625,8 @@ systrace_args(register_t sysnum, const void *params, uintptr_t *uarg, size_t *n_
 		iarg[1] = SCARG(p, id); /* id_t */
 		uarg[2] = (intptr_t) SCARG(p, info); /* linux_siginfo_t * */
 		iarg[3] = SCARG(p, options); /* int */
-		*n_args = 4;
+		uarg[4] = (intptr_t) SCARG(p, rusage); /* struct rusage50 * */
+		*n_args = 5;
 		break;
 	}
 	/* linux_sys_openat */
@@ -4601,6 +4602,9 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			break;
 		case 3:
 			p = "int";
+			break;
+		case 4:
+			p = "struct rusage50 *";
 			break;
 		default:
 			break;
