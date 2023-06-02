@@ -1139,8 +1139,10 @@ struct sysent linux_sysent[] = {
 		.sy_call = linux_sys_nosys,
 	},		/* 246 = filler */
 	{
-		.sy_call = linux_sys_nosys,
-	},		/* 247 = filler */
+		ns(struct linux_sys_waitid_args),
+		.sy_flags = SYCALL_ARG_PTR,
+		.sy_call = (sy_call_t *)linux_sys_waitid
+	},		/* 247 = waitid */
 	{
 		.sy_call = linux_sys_nosys,
 	},		/* 248 = filler */

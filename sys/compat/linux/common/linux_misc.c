@@ -179,7 +179,7 @@ static void linux_to_bsd_mmap_args(struct sys_mmap_args *,
     const struct linux_sys_mmap_args *);
 static int linux_mmap(struct lwp *, const struct linux_sys_mmap_args *,
     register_t *, off_t);
-
+static int linux_to_native_wait_options(int);
 
 /*
  * The information on a terminated (or stopped) process needs
@@ -228,19 +228,9 @@ linux_sys_wait4(struct lwp *l, const struct linux_sys_wait4_args *uap, register_
 	if (linux_options & ~(LINUX_WAIT4_KNOWNFLAGS))
 		return (EINVAL);
 
-	options = 0;
-	if (linux_options & LINUX_WAIT4_WNOHANG)
-		options |= WNOHANG;
-	if (linux_options & LINUX_WAIT4_WUNTRACED)
-		options |= WUNTRACED;
-	if (linux_options & LINUX_WAIT4_WCONTINUED)
-		options |= WCONTINUED;
-	if (linux_options & LINUX_WAIT4_WALL)
-		options |= WALLSIG;
-	if (linux_options & LINUX_WAIT4_WCLONE)
-		options |= WALTSIG;
+	options = linux_to_native_wait_options(linux_options);
 # ifdef DIAGNOSTIC
-	if (linux_options & LINUX_WAIT4_WNOTHREAD)
+	if (linux_options & LINUX_WNOTHREAD)
 		printf("WARNING: %s: linux process %d.%d called "
 		       "waitpid with __WNOTHREAD set!\n",
 		       __FILE__, l->l_proc->p_pid, l->l_lid);
@@ -270,6 +260,100 @@ linux_sys_wait4(struct lwp *l, const struct linux_sys_wait4_args *uap, register_
 	}
 
 	return error;
+}
+
+/*
+ * waitid(2).  Converting arguments to the NetBSD equivalent and
+ * calling it.
+ */
+int
+linux_sys_waitid(struct lwp *l, const struct linux_sys_waitid_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) idtype;
+		syscallarg(id_t) id;
+		syscallarg(linux_siginfo_t *) infop;
+		syscallarg(int) options;
+		syscallarg(struct rusage50 *) rusage;
+	} */
+	int error, linux_options, options, linux_idtype, status;
+	pid_t pid;
+	idtype_t idtype;
+	id_t id;
+	siginfo_t info;
+	linux_siginfo_t linux_info;
+	struct wrusage wru;
+	struct rusage50 ru50;
+
+	linux_idtype = SCARG(uap, idtype);
+	switch (linux_idtype) {
+	case LINUX_P_ALL:
+		idtype = P_ALL;
+		break;
+	case LINUX_P_PID:
+		idtype = P_PID;
+		break;
+	case LINUX_P_PGID:
+		idtype = P_PGID;
+		break;
+	case LINUX_P_PIDFD:
+		return EOPNOTSUPP;
+	default:
+		return EINVAL;
+	}
+
+	linux_options = SCARG(uap, options);
+	if (linux_options & ~(LINUX_WAITID_KNOWNFLAGS))
+		return EINVAL;
+
+	options = linux_to_native_wait_options(linux_options);
+	id = SCARG(uap, id);
+
+	error = do_sys_waitid(idtype, id, &pid, &status, options, &wru, &info);
+	if (pid == 0 && options & WNOHANG) {
+		info.si_signo = 0;
+		info.si_pid = 0;
+	}
+
+	if (error == 0 && SCARG(uap, infop) != NULL) {
+		/* POSIX says that this NULL check is a bug, but Linux does this. */
+		native_to_linux_siginfo(&linux_info, &info._info);
+		error = copyout(&linux_info, SCARG(uap, infop), sizeof(linux_info));
+	}
+
+	if (error == 0 && SCARG(uap, rusage) != NULL) {
+		rusage_to_rusage50(&wru.wru_children, &ru50);
+		error = copyout(&ru50, SCARG(uap, rusage), sizeof(ru50));
+	}
+
+	return error;
+}
+
+/*
+ * Convert the opttions argument for wait4(2) and waitid(2) from what
+ * Linux wants to what NetBSD wants.
+ */
+static int
+linux_to_native_wait_options(int linux_options)
+{
+	int options = 0;
+
+	if (linux_options & LINUX_WNOHANG)
+		options |= WNOHANG;
+	if (linux_options & LINUX_WUNTRACED)
+		options |= WUNTRACED;
+	if (linux_options & LINUX_WEXITED)
+		options |= WEXITED;
+	if (linux_options & LINUX_WCONTINUED)
+		options |= WCONTINUED;
+	if (linux_options & LINUX_WNOWAIT)
+		options |= WNOWAIT;
+	if (linux_options & LINUX_WALL)
+		options |= WALLSIG;
+	if (linux_options & LINUX_WCLONE)
+		options |= WALTSIG;
+
+	return options;
 }
 
 /*

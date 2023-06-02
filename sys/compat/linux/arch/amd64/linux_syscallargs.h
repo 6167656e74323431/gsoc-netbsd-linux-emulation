@@ -922,6 +922,15 @@ check_syscall_args(linux_sys_tgkill)
 
 struct compat_50_sys_utimes_args;
 
+struct linux_sys_waitid_args {
+	syscallarg(int) idtype;
+	syscallarg(id_t) id;
+	syscallarg(linux_siginfo_t *) infop;
+	syscallarg(int) options;
+	syscallarg(struct rusage50 *) rusage;
+};
+check_syscall_args(linux_sys_waitid)
+
 struct linux_sys_openat_args {
 	syscallarg(int) fd;
 	syscallarg(const char *) path;
@@ -1534,6 +1543,8 @@ int	linux_sys_exit_group(struct lwp *, const struct linux_sys_exit_group_args *,
 int	linux_sys_tgkill(struct lwp *, const struct linux_sys_tgkill_args *, register_t *);
 
 int	compat_50_sys_utimes(struct lwp *, const struct compat_50_sys_utimes_args *, register_t *);
+
+int	linux_sys_waitid(struct lwp *, const struct linux_sys_waitid_args *, register_t *);
 
 int	linux_sys_openat(struct lwp *, const struct linux_sys_openat_args *, register_t *);
 
