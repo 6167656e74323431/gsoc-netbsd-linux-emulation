@@ -276,7 +276,8 @@ linux_sys_waitid(struct lwp *l, const struct linux_sys_waitid_args *uap, registe
 		syscallarg(int) options;
 		syscallarg(struct rusage50 *) rusage;
 	} */
-	int error, linux_options, options, linux_idtype, pid, status;
+	int error, linux_options, options, linux_idtype, status;
+	pid_t pid;
 	idtype_t idtype;
 	id_t id;
 	siginfo_t info;
