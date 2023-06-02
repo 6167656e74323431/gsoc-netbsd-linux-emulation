@@ -1,4 +1,4 @@
-/*	$NETBSD: linux_misc.c,v 1.256 2021/12/02 04:29:48 ryo Exp $	*/
+/*	$NetBSD: linux_misc.c,v 1.256 2021/12/02 04:29:48 ryo Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998, 1999, 2008 The NetBSD Foundation, Inc.
