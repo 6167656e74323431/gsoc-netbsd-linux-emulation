@@ -296,6 +296,8 @@ linux_sys_waitid(struct lwp *l, const struct linux_sys_waitid_args *uap, registe
 	case LINUX_P_PGID:
 		idtype = P_PGID;
 		break;
+	case LINUX_P_PIDFD:
+		return EOPNOTSUPP;
 	default:
 		return EINVAL;
 	}
