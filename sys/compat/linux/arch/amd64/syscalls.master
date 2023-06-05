@@ -412,7 +412,7 @@
 210	UNIMPL		io_cancel
 211	UNIMPL		get_thread_area
 212	UNIMPL		lookup_dcookie
-213	UNIMPL		epoll_create
+213	STD		{ int|linux_sys||epoll_create(int size); }
 214	UNIMPL		epoll_ctl_old
 215	UNIMPL		epoll_wait_old
 216	UNIMPL		remap_file_pages
@@ -537,7 +537,7 @@
 289	UNIMPL		signalfd4
 290	STD		{ int|linux_sys||eventfd2(unsigned int initval, \
 			    int flags); }
-291	UNIMPL		epoll_create1
+291	UNIMPL		{ int|linux_sys||epoll_create1(int flags); }
 292	STD		{ int|linux_sys||dup3(int from, int to, int flags); }
 293	STD		{ int|linux_sys||pipe2(int *pfds, int flags); }
 294	UNIMPL		inotify_init1

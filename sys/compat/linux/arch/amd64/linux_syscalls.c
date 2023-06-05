@@ -279,7 +279,7 @@ const char *const linux_syscallnames[] = {
 	/* 210 */	"#210 (unimplemented io_cancel)",
 	/* 211 */	"#211 (unimplemented get_thread_area)",
 	/* 212 */	"#212 (unimplemented lookup_dcookie)",
-	/* 213 */	"#213 (unimplemented epoll_create)",
+	/* 213 */	"epoll_create",
 	/* 214 */	"#214 (unimplemented epoll_ctl_old)",
 	/* 215 */	"#215 (unimplemented epoll_wait_old)",
 	/* 216 */	"#216 (unimplemented remap_file_pages)",
@@ -357,7 +357,7 @@ const char *const linux_syscallnames[] = {
 	/* 288 */	"accept4",
 	/* 289 */	"#289 (unimplemented signalfd4)",
 	/* 290 */	"eventfd2",
-	/* 291 */	"#291 (unimplemented epoll_create1)",
+	/* 291 */	"#291 (unimplemented { int | linux_sys | | epoll_create1 ( int flags ) ; })",
 	/* 292 */	"dup3",
 	/* 293 */	"pipe2",
 	/* 294 */	"#294 (unimplemented inotify_init1)",
@@ -823,7 +823,7 @@ const char *const altlinux_syscallnames[] = {
 	/* 210 */	NULL, /* unimplemented io_cancel */
 	/* 211 */	NULL, /* unimplemented get_thread_area */
 	/* 212 */	NULL, /* unimplemented lookup_dcookie */
-	/* 213 */	NULL, /* unimplemented epoll_create */
+	/* 213 */	NULL, /* epoll_create */
 	/* 214 */	NULL, /* unimplemented epoll_ctl_old */
 	/* 215 */	NULL, /* unimplemented epoll_wait_old */
 	/* 216 */	NULL, /* unimplemented remap_file_pages */
@@ -901,7 +901,7 @@ const char *const altlinux_syscallnames[] = {
 	/* 288 */	NULL, /* accept4 */
 	/* 289 */	NULL, /* unimplemented signalfd4 */
 	/* 290 */	NULL, /* eventfd2 */
-	/* 291 */	NULL, /* unimplemented epoll_create1 */
+	/* 291 */	NULL, /* unimplemented { int | linux_sys | | epoll_create1 ( int flags ) ; } */
 	/* 292 */	NULL, /* dup3 */
 	/* 293 */	NULL, /* pipe2 */
 	/* 294 */	NULL, /* unimplemented inotify_init1 */

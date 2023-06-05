@@ -837,6 +837,11 @@ struct linux_sys_sched_getaffinity_args {
 };
 check_syscall_args(linux_sys_sched_getaffinity)
 
+struct linux_sys_epoll_create_args {
+	syscallarg(int) size;
+};
+check_syscall_args(linux_sys_epoll_create)
+
 struct linux_sys_getdents64_args {
 	syscallarg(int) fd;
 	syscallarg(struct linux_dirent64 *) dent;
@@ -1513,6 +1518,8 @@ int	linux_sys_futex(struct lwp *, const struct linux_sys_futex_args *, register_
 int	linux_sys_sched_setaffinity(struct lwp *, const struct linux_sys_sched_setaffinity_args *, register_t *);
 
 int	linux_sys_sched_getaffinity(struct lwp *, const struct linux_sys_sched_getaffinity_args *, register_t *);
+
+int	linux_sys_epoll_create(struct lwp *, const struct linux_sys_epoll_create_args *, register_t *);
 
 int	linux_sys_getdents64(struct lwp *, const struct linux_sys_getdents64_args *, register_t *);
 

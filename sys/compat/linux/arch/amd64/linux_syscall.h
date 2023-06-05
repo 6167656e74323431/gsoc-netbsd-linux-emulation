@@ -564,6 +564,9 @@
 /* syscall: "sched_getaffinity" ret: "int" args: "pid_t" "unsigned int" "unsigned long *" */
 #define	LINUX_SYS_sched_getaffinity	204
 
+/* syscall: "epoll_create" ret: "int" args: "int" */
+#define	LINUX_SYS_epoll_create	213
+
 /* syscall: "getdents64" ret: "int" args: "int" "struct linux_dirent64 *" "unsigned int" */
 #define	LINUX_SYS_getdents64	217
 

@@ -1493,6 +1493,13 @@ systrace_args(register_t sysnum, const void *params, uintptr_t *uarg, size_t *n_
 		*n_args = 3;
 		break;
 	}
+	/* linux_sys_epoll_create */
+	case 213: {
+		const struct linux_sys_epoll_create_args *p = params;
+		iarg[0] = SCARG(p, size); /* int */
+		*n_args = 1;
+		break;
+	}
 	/* linux_sys_getdents64 */
 	case 217: {
 		const struct linux_sys_getdents64_args *p = params;
@@ -4378,6 +4385,16 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			break;
 		};
 		break;
+	/* linux_sys_epoll_create */
+	case 213:
+		switch(ndx) {
+		case 0:
+			p = "int";
+			break;
+		default:
+			break;
+		};
+		break;
 	/* linux_sys_getdents64 */
 	case 217:
 		switch(ndx) {
@@ -6049,6 +6066,11 @@ systrace_return_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 		break;
 	/* linux_sys_sched_getaffinity */
 	case 204:
+		if (ndx == 0 || ndx == 1)
+			p = "int";
+		break;
+	/* linux_sys_epoll_create */
+	case 213:
 		if (ndx == 0 || ndx == 1)
 			p = "int";
 		break;
