@@ -30,12 +30,13 @@
 #include <sys/types.h>
 #include <sys/event.h>
 #include <sys/errno.h>
+#include <sys/fcntl.h>
 
 #include <sys/syscallargs.h>
 
 #include <compat/linux/common/linux_machdep.h>
-
 #include <compat/linux/common/linux_event.h>
+#include <compat/linux/common/linux_fcntl.h>
 
 #include <compat/linux/linux_syscallargs.h>
 
@@ -94,25 +95,25 @@ linux_sys_epoll_create(struct lwp *l, const struct linux_sys_epoll_create_args *
 
 	return sys_kqueue(l, NULL, retval);
 }
-#if 0
+
 int
 linux_sys_epoll_create1(struct lwp *l, const struct linux_sys_epoll_create1_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(int) flags;
 	} */
-	int flags;
+	struct sys_kqueue1_args kqa;
 
-	if ((args->flags & ~(LINUX_O_CLOEXEC)) != 0)
+	if ((SCARG(uap, flags) & ~(LINUX_O_CLOEXEC)) != 0)
 		return (EINVAL);
 
-	flags = 0;
-	if ((args->flags & LINUX_O_CLOEXEC) != 0)
-		flags |= O_CLOEXEC;
+	SCARG(&kqa, flags) = 0;
+	if ((SCARG(uap, flags) & LINUX_O_CLOEXEC) != 0)
+		SCARG(&kqa, flags) |= O_CLOEXEC;
 
-	return (epoll_create_common(td, flags));
+	return sys_kqueue1(l, &kqa, retval);
 }
-
+#if 0
 /* Structure converting function from epoll to kevent. */
 static int
 epoll_to_kevent(struct thread *td, int fd, struct epoll_event *l_event,

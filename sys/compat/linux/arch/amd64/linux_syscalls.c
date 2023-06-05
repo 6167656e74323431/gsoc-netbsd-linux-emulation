@@ -357,7 +357,7 @@ const char *const linux_syscallnames[] = {
 	/* 288 */	"accept4",
 	/* 289 */	"#289 (unimplemented signalfd4)",
 	/* 290 */	"eventfd2",
-	/* 291 */	"#291 (unimplemented { int | linux_sys | | epoll_create1 ( int flags ) ; })",
+	/* 291 */	"epoll_create1",
 	/* 292 */	"dup3",
 	/* 293 */	"pipe2",
 	/* 294 */	"#294 (unimplemented inotify_init1)",
@@ -901,7 +901,7 @@ const char *const altlinux_syscallnames[] = {
 	/* 288 */	NULL, /* accept4 */
 	/* 289 */	NULL, /* unimplemented signalfd4 */
 	/* 290 */	NULL, /* eventfd2 */
-	/* 291 */	NULL, /* unimplemented { int | linux_sys | | epoll_create1 ( int flags ) ; } */
+	/* 291 */	NULL, /* epoll_create1 */
 	/* 292 */	NULL, /* dup3 */
 	/* 293 */	NULL, /* pipe2 */
 	/* 294 */	NULL, /* unimplemented inotify_init1 */

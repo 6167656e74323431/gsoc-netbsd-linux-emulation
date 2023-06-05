@@ -1084,6 +1084,11 @@ struct linux_sys_eventfd2_args {
 };
 check_syscall_args(linux_sys_eventfd2)
 
+struct linux_sys_epoll_create1_args {
+	syscallarg(int) flags;
+};
+check_syscall_args(linux_sys_epoll_create1)
+
 struct linux_sys_dup3_args {
 	syscallarg(int) from;
 	syscallarg(int) to;
@@ -1600,6 +1605,8 @@ int	linux_sys_timerfd_gettime(struct lwp *, const struct linux_sys_timerfd_getti
 int	linux_sys_accept4(struct lwp *, const struct linux_sys_accept4_args *, register_t *);
 
 int	linux_sys_eventfd2(struct lwp *, const struct linux_sys_eventfd2_args *, register_t *);
+
+int	linux_sys_epoll_create1(struct lwp *, const struct linux_sys_epoll_create1_args *, register_t *);
 
 int	linux_sys_dup3(struct lwp *, const struct linux_sys_dup3_args *, register_t *);
 

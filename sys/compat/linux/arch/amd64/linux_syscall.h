@@ -687,6 +687,9 @@
 /* syscall: "eventfd2" ret: "int" args: "unsigned int" "int" */
 #define	LINUX_SYS_eventfd2	290
 
+/* syscall: "epoll_create1" ret: "int" args: "int" */
+#define	LINUX_SYS_epoll_create1	291
+
 /* syscall: "dup3" ret: "int" args: "int" "int" "int" */
 #define	LINUX_SYS_dup3	292
 

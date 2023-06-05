@@ -537,7 +537,7 @@
 289	UNIMPL		signalfd4
 290	STD		{ int|linux_sys||eventfd2(unsigned int initval, \
 			    int flags); }
-291	UNIMPL		{ int|linux_sys||epoll_create1(int flags); }
+291	STD		{ int|linux_sys||epoll_create1(int flags); }
 292	STD		{ int|linux_sys||dup3(int from, int to, int flags); }
 293	STD		{ int|linux_sys||pipe2(int *pfds, int flags); }
 294	UNIMPL		inotify_init1

@@ -1319,8 +1319,9 @@ struct sysent linux_sysent[] = {
 		.sy_call = (sy_call_t *)linux_sys_eventfd2
 	},		/* 290 = eventfd2 */
 	{
-		.sy_call = linux_sys_nosys,
-	},		/* 291 = filler */
+		ns(struct linux_sys_epoll_create1_args),
+		.sy_call = (sy_call_t *)linux_sys_epoll_create1
+	},		/* 291 = epoll_create1 */
 	{
 		ns(struct linux_sys_dup3_args),
 		.sy_call = (sy_call_t *)linux_sys_dup3
