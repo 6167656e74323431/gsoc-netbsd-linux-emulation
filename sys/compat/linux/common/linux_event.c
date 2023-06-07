@@ -226,6 +226,14 @@ epoll_kev_copyin(void *ctx, const struct kevent *changelist,
 	return 0;
 }
 
+static int
+epoll_kev_fetch_timeout(const void *src, void *dest, size_t size)
+{
+	memcpy(dest, src, size);
+
+	return 0;
+}
+
 /*
  * Load epoll filter, convert it to kevent filter
  * and load it into kevent subsystem.
@@ -310,7 +318,7 @@ linux_epoll_wait_ts(struct lwp *l, register_t *retval, int epfd,
 	struct epoll_copyout_args coargs;
 	struct kevent_ops k_ops = {
 	        .keo_private = &coargs,
-		.keo_fetch_timeout = copyin,
+		.keo_fetch_timeout = epoll_kev_fetch_timeout,
 		.keo_fetch_changes = NULL,
 		.keo_put_events = epoll_kev_copyout,
 	};
