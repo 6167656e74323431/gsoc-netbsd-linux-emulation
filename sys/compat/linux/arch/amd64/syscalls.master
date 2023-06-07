@@ -522,7 +522,9 @@
 279	UNIMPL		move_pages
 280	STD		{ int|linux_sys||utimensat(int fd, const char *path, \
 			    struct linux_timespec *times, int flag); }
-281	UNIMPL		epoll_pwait
+281	STD		{ int|linux_sys||epoll_pwait(int epfd, \
+			    struct linux_epoll_event *events, int maxevents, \
+			    int timeout, const linux_sigset_t *sigmask); }
 282	UNIMPL		signalfd
 283	STD		{ int|linux_sys||timerfd_create(clockid_t clock_id, \
 			    int flags); }

@@ -324,10 +324,10 @@ linux_epoll_wait_ts(struct lwp *l, register_t *retval, int epfd,
 		linux_to_native_sigset(&nss, lss);
 
 		mutex_enter(p->p_lock);
-
 		error = sigprocmask1(l, SIG_SETMASK, &nss, &oss);
+		mutex_exit(p->p_lock);
 		if (error != 0)
-			goto leave;
+			return error;
 //		td->td_pflags |= TDP_OLDMASK;
 //		/*
 //		 * Make sure that ast() is called on return to
@@ -351,12 +351,11 @@ linux_epoll_wait_ts(struct lwp *l, register_t *retval, int epfd,
 //	if (error == 0)
 //		td->td_retval[0] = coargs.count;
 
-	if (lss != NULL)
+	if (lss != NULL) {
+	        mutex_enter(p->p_lock);
 		error = sigprocmask1(l, SIG_SETMASK, &oss, NULL);
-
-leave:
-	if (lss != NULL)
-		mutex_exit(p->p_lock);	
+		mutex_exit(p->p_lock);
+	}
 
 	return (error);
 }
@@ -398,22 +397,31 @@ linux_sys_epoll_wait(struct lwp *l, const struct linux_sys_epoll_wait_args *uap,
 	return linux_epoll_wait_common(l, retval, SCARG(uap, epfd), SCARG(uap, events),
 	    SCARG(uap, maxevents), SCARG(uap, timeout), NULL);
 }
-#if 0
-int
-linux_sys_epoll_pwait(struct thread *td, struct linux_epoll_pwait_args *args)
-{
-	sigset_t mask, *pmask;
-	int error;
 
-	error = linux_copyin_sigset(td, args->mask, sizeof(l_sigset_t),
-	    &mask, &pmask);
+int
+linux_sys_epoll_pwait(struct lwp *l, const struct linux_sys_epoll_pwait_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) epfd;
+		syscallarg(struct linux_epoll_event *) events;
+		syscallarg(int) maxevents;
+		syscallarg(int) timeout;
+		syscallarg(linux_sigset_t *) sigmask;
+	} */
+	linux_sigset_t lss, *lssp = NULL;
+	int error = 0;
+
+	if (SCARG(uap, sigmask) != NULL) {
+		lssp = &lss;
+		error = copyin(SCARG(uap, sigmask), &lss, sizeof(lss));
+	}	
 	if (error != 0)
 		return (error);
 
-	return (linux_epoll_wait_common(td, args->epfd, args->events,
-	    args->maxevents, args->timeout, pmask));
+	return linux_epoll_wait_common(l, retval, SCARG(uap, epfd), SCARG(uap, events),
+	    SCARG(uap, maxevents), SCARG(uap, timeout), lssp);
 }
-
+#if 0
 int
 linux_sys_epoll_pwait2(struct thread *td, struct linux_epoll_pwait2_args *args)
 {

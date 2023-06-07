@@ -672,6 +672,9 @@
 /* syscall: "utimensat" ret: "int" args: "int" "const char *" "struct linux_timespec *" "int" */
 #define	LINUX_SYS_utimensat	280
 
+/* syscall: "epoll_pwait" ret: "int" args: "int" "struct linux_epoll_event *" "int" "int" "const linux_sigset_t *" */
+#define	LINUX_SYS_epoll_pwait	281
+
 /* syscall: "timerfd_create" ret: "int" args: "clockid_t" "int" */
 #define	LINUX_SYS_timerfd_create	283
 

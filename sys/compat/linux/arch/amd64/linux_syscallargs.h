@@ -1053,6 +1053,15 @@ struct linux_sys_utimensat_args {
 };
 check_syscall_args(linux_sys_utimensat)
 
+struct linux_sys_epoll_pwait_args {
+	syscallarg(int) epfd;
+	syscallarg(struct linux_epoll_event *) events;
+	syscallarg(int) maxevents;
+	syscallarg(int) timeout;
+	syscallarg(const linux_sigset_t *) sigmask;
+};
+check_syscall_args(linux_sys_epoll_pwait)
+
 struct linux_sys_timerfd_create_args {
 	syscallarg(clockid_t) clock_id;
 	syscallarg(int) flags;
@@ -1611,6 +1620,8 @@ int	sys___futex_set_robust_list(struct lwp *, const struct sys___futex_set_robus
 int	sys___futex_get_robust_list(struct lwp *, const struct sys___futex_get_robust_list_args *, register_t *);
 
 int	linux_sys_utimensat(struct lwp *, const struct linux_sys_utimensat_args *, register_t *);
+
+int	linux_sys_epoll_pwait(struct lwp *, const struct linux_sys_epoll_pwait_args *, register_t *);
 
 int	linux_sys_timerfd_create(struct lwp *, const struct linux_sys_timerfd_create_args *, register_t *);
 

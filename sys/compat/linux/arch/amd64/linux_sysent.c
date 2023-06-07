@@ -1282,8 +1282,10 @@ struct sysent linux_sysent[] = {
 		.sy_call = (sy_call_t *)linux_sys_utimensat
 	},		/* 280 = utimensat */
 	{
-		.sy_call = linux_sys_nosys,
-	},		/* 281 = filler */
+		ns(struct linux_sys_epoll_pwait_args),
+		.sy_flags = SYCALL_ARG_PTR,
+		.sy_call = (sy_call_t *)linux_sys_epoll_pwait
+	},		/* 281 = epoll_pwait */
 	{
 		.sy_call = linux_sys_nosys,
 	},		/* 282 = filler */

@@ -347,7 +347,7 @@ const char *const linux_syscallnames[] = {
 	/* 278 */	"#278 (unimplemented vmsplice)",
 	/* 279 */	"#279 (unimplemented move_pages)",
 	/* 280 */	"utimensat",
-	/* 281 */	"#281 (unimplemented epoll_pwait)",
+	/* 281 */	"epoll_pwait",
 	/* 282 */	"#282 (unimplemented signalfd)",
 	/* 283 */	"timerfd_create",
 	/* 284 */	"eventfd",
@@ -891,7 +891,7 @@ const char *const altlinux_syscallnames[] = {
 	/* 278 */	NULL, /* unimplemented vmsplice */
 	/* 279 */	NULL, /* unimplemented move_pages */
 	/* 280 */	NULL, /* utimensat */
-	/* 281 */	NULL, /* unimplemented epoll_pwait */
+	/* 281 */	NULL, /* epoll_pwait */
 	/* 282 */	NULL, /* unimplemented signalfd */
 	/* 283 */	NULL, /* timerfd_create */
 	/* 284 */	NULL, /* eventfd */
