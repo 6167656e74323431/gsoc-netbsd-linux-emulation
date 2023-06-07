@@ -39,6 +39,7 @@
 #include <compat/linux/common/linux_machdep.h>
 #include <compat/linux/common/linux_event.h>
 #include <compat/linux/common/linux_fcntl.h>
+#include <compat/linux/common/linux_sched.h>
 #include <compat/linux/common/linux_signal.h>
 
 #include <compat/linux/linux_syscallargs.h>
@@ -302,7 +303,7 @@ linux_sys_epoll_ctl(struct lwp *l, const struct linux_sys_epoll_ctl_args *uap, r
 static int
 linux_epoll_wait_ts(struct lwp *l, register_t *retval, int epfd,
     struct linux_epoll_event *events, int maxevents, struct timespec *tsp,
-    linux_sigset_t *lss)
+    const linux_sigset_t *lssp)
 {
 	struct epoll_copyout_args coargs;
 	struct kevent_ops k_ops = {
@@ -313,15 +314,20 @@ linux_epoll_wait_ts(struct lwp *l, register_t *retval, int epfd,
 	};
 	struct proc *p = l->l_proc;
 	sigset_t nss, oss;
+	linux_sigset_t lss;
 	int error;
 
 	if (maxevents <= 0 || maxevents > LINUX_MAX_EVENTS)
 		return (EINVAL);
 
 	// TODO: validate epfd
-
-	if (lss != NULL) {
-		linux_to_native_sigset(&nss, lss);
+	
+	if (lssp != NULL) {
+		error = copyin(lssp, &lss, sizeof(lss));
+		if (error != 0)
+			return error;
+		
+		linux_to_native_sigset(&nss, &lss);
 
 		mutex_enter(p->p_lock);
 		error = sigprocmask1(l, SIG_SETMASK, &nss, &oss);
@@ -351,7 +357,7 @@ linux_epoll_wait_ts(struct lwp *l, register_t *retval, int epfd,
 //	if (error == 0)
 //		td->td_retval[0] = coargs.count;
 
-	if (lss != NULL) {
+	if (lssp != NULL) {
 	        mutex_enter(p->p_lock);
 		error = sigprocmask1(l, SIG_SETMASK, &oss, NULL);
 		mutex_exit(p->p_lock);
@@ -363,7 +369,7 @@ linux_epoll_wait_ts(struct lwp *l, register_t *retval, int epfd,
 static int
 linux_epoll_wait_common(struct lwp *l, register_t *retval, int epfd,
     struct linux_epoll_event *events, int maxevents, int timeout,
-    linux_sigset_t *lss)
+    const linux_sigset_t *lssp)
 {
 	struct timespec ts, *tsp;
 
@@ -380,7 +386,7 @@ linux_epoll_wait_common(struct lwp *l, register_t *retval, int epfd,
 	} else {
 		tsp = NULL;
 	}
-	return linux_epoll_wait_ts(l, retval, epfd, events, maxevents, tsp, lss);
+	return linux_epoll_wait_ts(l, retval, epfd, events, maxevents, tsp, lssp);
 
 }
 
@@ -408,44 +414,40 @@ linux_sys_epoll_pwait(struct lwp *l, const struct linux_sys_epoll_pwait_args *ua
 		syscallarg(int) timeout;
 		syscallarg(linux_sigset_t *) sigmask;
 	} */
-	linux_sigset_t lss, *lssp = NULL;
-	int error = 0;
-
-	if (SCARG(uap, sigmask) != NULL) {
-		lssp = &lss;
-		error = copyin(SCARG(uap, sigmask), &lss, sizeof(lss));
-	}	
-	if (error != 0)
-		return (error);
 
 	return linux_epoll_wait_common(l, retval, SCARG(uap, epfd), SCARG(uap, events),
-	    SCARG(uap, maxevents), SCARG(uap, timeout), lssp);
+	    SCARG(uap, maxevents), SCARG(uap, timeout), SCARG(uap, sigmask));
 }
-#if 0
+
 int
-linux_sys_epoll_pwait2(struct thread *td, struct linux_epoll_pwait2_args *args)
+linux_sys_epoll_pwait2(struct lwp *l, const struct linux_sys_epoll_pwait2_args *uap, register_t *retval)
 {
-	struct timespec ts, *tsa;
-	sigset_t mask, *pmask;
+	/* {
+		syscallarg(int) epfd;
+		syscallarg(struct linux_epoll_event *) events;
+		syscallarg(int) maxevents;
+		syscallarg(struct linux_timespec *) timeout;
+		syscallarg(linux_sigset_t *) sigmask;
+	} */
+	struct timespec ts, *tsp;
+	struct linux_timespec lts;
 	int error;
 
-	error = linux_copyin_sigset(td, args->mask, sizeof(l_sigset_t),
-	    &mask, &pmask);
-	if (error != 0)
-		return (error);
-
-	if (args->timeout) {
-		error = linux_get_timespec(&ts, args->timeout);
+	if (SCARG(uap, timeout) != NULL) {
+		error = copyin(SCARG(uap, timeout), &lts, sizeof(lts));
 		if (error != 0)
-			return (error);
-		tsa = &ts;
-	} else
-		tsa = NULL;
+			return error;
 
-	return (linux_epoll_wait_ts(td, args->epfd, args->events,
-	    args->maxevents, tsa, pmask));
+		linux_to_native_timespec(&ts, &lts);
+		tsp = &ts;
+	} else
+		tsp = NULL;
+
+	return linux_epoll_wait_ts(l, retval, SCARG(uap, epfd),
+	    SCARG(uap, events), SCARG(uap, maxevents), tsp,
+	    SCARG(uap, sigmask));
 }
-#endif
+
 static int
 epoll_register_kevent(register_t *retval, int epfd, int fd, int filter,
     unsigned int flags)

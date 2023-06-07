@@ -702,7 +702,10 @@
 438	UNIMPL		pidfd_getfd
 439	UNIMPL		faccessat2
 440	UNIMPL		process_madvise
-441	UNIMPL		epoll_pwait2
+441	STD		{ int|linux_sys||epoll_pwait2(int epfd, \
+			    struct linux_epoll_event *events, int maxevents, \
+			    const struct linux_timespec *timeout, \
+			    const linux_sigset_t *sigmask); }
 442	UNIMPL		mount_setattr
 443	UNIMPL		quotactl_fd
 444	UNIMPL		landlock_create_ruleset

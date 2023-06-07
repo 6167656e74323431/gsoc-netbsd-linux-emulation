@@ -723,6 +723,9 @@
 /* syscall: "getrandom" ret: "ssize_t" args: "void *" "size_t" "unsigned int" */
 #define	LINUX_SYS_getrandom	318
 
+/* syscall: "epoll_pwait2" ret: "int" args: "int" "struct linux_epoll_event *" "int" "const struct linux_timespec *" "const linux_sigset_t *" */
+#define	LINUX_SYS_epoll_pwait2	441
+
 /* syscall: "nosys" ret: "int" args: */
 #define	LINUX_SYS_nosys	451
 

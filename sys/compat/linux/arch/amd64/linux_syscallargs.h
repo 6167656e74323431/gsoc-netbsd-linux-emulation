@@ -1172,6 +1172,15 @@ check_syscall_args(linux_sys_sendmmsg)
 
 struct sys_getrandom_args;
 
+struct linux_sys_epoll_pwait2_args {
+	syscallarg(int) epfd;
+	syscallarg(struct linux_epoll_event *) events;
+	syscallarg(int) maxevents;
+	syscallarg(const struct linux_timespec *) timeout;
+	syscallarg(const linux_sigset_t *) sigmask;
+};
+check_syscall_args(linux_sys_epoll_pwait2)
+
 /*
  * System call prototypes.
  */
@@ -1654,6 +1663,8 @@ int	linux_sys_prlimit64(struct lwp *, const struct linux_sys_prlimit64_args *, r
 int	linux_sys_sendmmsg(struct lwp *, const struct linux_sys_sendmmsg_args *, register_t *);
 
 int	sys_getrandom(struct lwp *, const struct sys_getrandom_args *, register_t *);
+
+int	linux_sys_epoll_pwait2(struct lwp *, const struct linux_sys_epoll_pwait2_args *, register_t *);
 
 int	linux_sys_nosys(struct lwp *, const void *, register_t *);
 

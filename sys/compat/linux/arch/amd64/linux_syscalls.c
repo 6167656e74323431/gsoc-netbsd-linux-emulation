@@ -507,7 +507,7 @@ const char *const linux_syscallnames[] = {
 	/* 438 */	"#438 (unimplemented pidfd_getfd)",
 	/* 439 */	"#439 (unimplemented faccessat2)",
 	/* 440 */	"#440 (unimplemented process_madvise)",
-	/* 441 */	"#441 (unimplemented epoll_pwait2)",
+	/* 441 */	"epoll_pwait2",
 	/* 442 */	"#442 (unimplemented mount_setattr)",
 	/* 443 */	"#443 (unimplemented quotactl_fd)",
 	/* 444 */	"#444 (unimplemented landlock_create_ruleset)",
@@ -1051,7 +1051,7 @@ const char *const altlinux_syscallnames[] = {
 	/* 438 */	NULL, /* unimplemented pidfd_getfd */
 	/* 439 */	NULL, /* unimplemented faccessat2 */
 	/* 440 */	NULL, /* unimplemented process_madvise */
-	/* 441 */	NULL, /* unimplemented epoll_pwait2 */
+	/* 441 */	NULL, /* epoll_pwait2 */
 	/* 442 */	NULL, /* unimplemented mount_setattr */
 	/* 443 */	NULL, /* unimplemented quotactl_fd */
 	/* 444 */	NULL, /* unimplemented landlock_create_ruleset */
