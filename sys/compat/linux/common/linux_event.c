@@ -31,23 +31,27 @@
 #include <sys/event.h>
 #include <sys/errno.h>
 #include <sys/fcntl.h>
+#include <sys/proc.h>
+#include <sys/signal.h>
 
 #include <sys/syscallargs.h>
 
 #include <compat/linux/common/linux_machdep.h>
 #include <compat/linux/common/linux_event.h>
 #include <compat/linux/common/linux_fcntl.h>
+#include <compat/linux/common/linux_signal.h>
 
 #include <compat/linux/linux_syscallargs.h>
 
-#define	LINUX_MAX_EVENTS	(INT_MAX / sizeof(struct epoll_event))
+#define	LINUX_MAX_EVENTS	(INT_MAX / sizeof(struct linux_epoll_event))
 
 static int	epoll_to_kevent(int fd,
 		    struct linux_epoll_event *l_event, struct kevent *kevent,
 		    int *nkevents);
-//static void	kevent_to_epoll(struct kevent *kevent,
-//		    struct linux_epoll_event *l_event);
-//static int	epoll_kev_copyout(void *arg, struct kevent *kevp, int count);
+static void	kevent_to_epoll(struct kevent *kevent,
+		    struct linux_epoll_event *l_event);
+static int      epoll_kev_copyout(void *ctx, struct kevent *events,
+		    struct kevent *eventlist, size_t index, int n);
 static int	epoll_kev_copyin(void *ctx, const struct kevent *changelist,
 		    struct kevent *changes, size_t index, int n);
 static int	epoll_register_kevent(register_t *retval, int epfd,
@@ -58,10 +62,8 @@ static int	epoll_delete_all_events(register_t *retval, int epfd,
 		    int fd);
 
 struct epoll_copyout_args {
-	struct epoll_event	*leventlist;
-	struct proc		*p;
-	uint32_t		count;
-	int			error;
+	struct linux_epoll_event	*leventlist;
+	int				error;
 };
 
 int
@@ -121,12 +123,14 @@ epoll_to_kevent(int fd, struct linux_epoll_event *l_event,
 	if ((levents & LINUX_EPOLL_EVRD) != 0) {
 		EV_SET(kevent, fd, EVFILT_READ, kev_flags, 0, 0, 0);
 //		kevent->ext[0] = l_event->data;
+		kevent->udata = (void *)l_event->data; // TODO hack and wrong
 		++kevent;
 		++(*nkevents);
 	}
 	if ((levents & LINUX_EPOLL_EVWR) != 0) {
 		EV_SET(kevent, fd, EVFILT_WRITE, kev_flags, 0, 0, 0);
 //		kevent->ext[0] = l_event->data;
+		kevent->udata = (void *)l_event->data; // TODO hack and wrong
 		++kevent;
 		++(*nkevents);
 	}
@@ -142,7 +146,7 @@ epoll_to_kevent(int fd, struct linux_epoll_event *l_event,
 
 	return (0);
 }
-#if 0
+
 /*
  * Structure converting function from kevent to epoll. In a case
  * this is called on error in registration we store the error in
@@ -152,7 +156,8 @@ static void
 kevent_to_epoll(struct kevent *kevent, struct linux_epoll_event *l_event)
 {
 
-	l_event->data = kevent->ext[0];
+//	l_event->data = kevent->ext[0];
+	l_event->data = (epoll_udata_t)kevent->udata; // TODO hack and wrong
 
 	if ((kevent->flags & EV_ERROR) != 0) {
 		l_event->events = LINUX_EPOLLERR;
@@ -165,10 +170,10 @@ kevent_to_epoll(struct kevent *kevent, struct linux_epoll_event *l_event)
 		l_event->events = LINUX_EPOLLIN;
 		if ((kevent->flags & EV_EOF) != 0)
 			l_event->events |= LINUX_EPOLLRDHUP;
-	break;
+		break;
 	case EVFILT_WRITE:
 		l_event->events = LINUX_EPOLLOUT;
-	break;
+		break;
 	}
 }
 
@@ -179,29 +184,30 @@ kevent_to_epoll(struct kevent *kevent, struct linux_epoll_event *l_event)
  * of the filter.
  */
 static int
-epoll_kev_copyout(void *arg, struct kevent *kevp, int count)
+epoll_kev_copyout(void *ctx, struct kevent *events,
+    struct kevent *eventlist, size_t index, int n)
 {
 	struct epoll_copyout_args *args;
-	struct epoll_event *eep;
+	struct linux_epoll_event *eep;
 	int error, i;
+	size_t levent_size = sizeof(*eep) * n;
 
-	args = (struct epoll_copyout_args*) arg;
-	eep = malloc(sizeof(*eep) * count, M_EPOLL, M_WAITOK | M_ZERO);
+	args = (struct epoll_copyout_args *)ctx;
+	eep = kmem_alloc(levent_size, KM_SLEEP);
 
-	for (i = 0; i < count; i++)
-		kevent_to_epoll(&kevp[i], &eep[i]);
+	for (i = 0; i < n; i++)
+		kevent_to_epoll(events + index + i, eep + i);
 
-	error = copyout(eep, args->leventlist, count * sizeof(*eep));
-	if (error == 0) {
-		args->leventlist += count;
-		args->count += count;
-	} else if (args->error == 0)
+	error = copyout(eep, args->leventlist, levent_size);
+	if (error == 0)
+		args->leventlist += n;
+	else if (args->error == 0)
 		args->error = error;
 
-	free(eep, M_EPOLL);
+	kmem_free(eep, levent_size);
 	return (error);
 }
-#endif
+
 /*
  * Copyin callback used by kevent. This copies already
  * converted filters from kernel memory to the kevent
@@ -288,76 +294,77 @@ linux_sys_epoll_ctl(struct lwp *l, const struct linux_sys_epoll_ctl_args *uap, r
 
 	return (error);
 }
-#if 0
+
 /*
  * Wait for a filter to be triggered on the epoll file descriptor.
  */
 
 static int
-linux_epoll_wait_ts(struct thread *td, int epfd, struct epoll_event *events,
-    int maxevents, struct timespec *tsp, sigset_t *uset)
+linux_epoll_wait_ts(struct lwp *l, register_t *retval, int epfd,
+    struct linux_epoll_event *events, int maxevents, struct timespec *tsp,
+    linux_sigset_t *lss)
 {
 	struct epoll_copyout_args coargs;
-	struct kevent_copyops k_ops = { &coargs,
-					epoll_kev_copyout,
-					NULL};
-	cap_rights_t rights;
-	struct file *epfp;
-	sigset_t omask;
+	struct kevent_ops k_ops = {
+	        .keo_private = &coargs,
+		.keo_fetch_timeout = copyin,
+		.keo_fetch_changes = NULL,
+		.keo_put_events = epoll_kev_copyout,
+	};
+	struct proc *p = l->l_proc;
+	sigset_t nss, oss;
 	int error;
 
 	if (maxevents <= 0 || maxevents > LINUX_MAX_EVENTS)
 		return (EINVAL);
 
-	error = fget(td, epfd,
-	    cap_rights_init_one(&rights, CAP_KQUEUE_EVENT), &epfp);
-	if (error != 0)
-		return (error);
-	if (epfp->f_type != DTYPE_KQUEUE) {
-		error = EINVAL;
-		goto leave;
-	}
-	if (uset != NULL) {
-		error = kern_sigprocmask(td, SIG_SETMASK, uset,
-		    &omask, 0);
+	// TODO: validate epfd
+
+	if (lss != NULL) {
+		linux_to_native_sigset(&nss, lss);
+
+		mutex_enter(p->p_lock);
+
+		error = sigprocmask1(l, SIG_SETMASK, &nss, &oss);
 		if (error != 0)
 			goto leave;
-		td->td_pflags |= TDP_OLDMASK;
-		/*
-		 * Make sure that ast() is called on return to
-		 * usermode and TDP_OLDMASK is cleared, restoring old
-		 * sigmask.
-		 */
-		ast_sched(td, TDA_SIGSUSPEND);
+//		td->td_pflags |= TDP_OLDMASK;
+//		/*
+//		 * Make sure that ast() is called on return to
+//		 * usermode and TDP_OLDMASK is cleared, restoring old
+//		 * sigmask.
+//		 */
+//		ast_sched(td, TDA_SIGSUSPEND);
 	}
 
 	coargs.leventlist = events;
-	coargs.p = td->td_proc;
-	coargs.count = 0;
 	coargs.error = 0;
 
-	error = kern_kevent_fp(td, epfp, 0, maxevents, &k_ops, tsp);
+	error = kevent1(retval, epfd, NULL, 0, NULL, maxevents, tsp, &k_ops);
 	if (error == 0 && coargs.error != 0)
 		error = coargs.error;
 
-	/*
-	 * kern_kevent might return ENOMEM which is not expected from epoll_wait.
-	 * Maybe we should translate that but I don't think it matters at all.
-	 */
-	if (error == 0)
-		td->td_retval[0] = coargs.count;
+//	/*
+//	 * kern_kevent might return ENOMEM which is not expected from epoll_wait.
+//	 * Maybe we should translate that but I don't think it matters at all.
+//	 */
+//	if (error == 0)
+//		td->td_retval[0] = coargs.count;
 
-	if (uset != NULL)
-		error = kern_sigprocmask(td, SIG_SETMASK, &omask,
-		    NULL, 0);
+	if (lss != NULL)
+		error = sigprocmask1(l, SIG_SETMASK, &oss, NULL);
+
 leave:
-	fdrop(epfp, td);
+	if (lss != NULL)
+		mutex_exit(p->p_lock);	
+
 	return (error);
 }
 
 static int
-linux_epoll_wait_common(struct thread *td, int epfd, struct epoll_event *events,
-    int maxevents, int timeout, sigset_t *uset)
+linux_epoll_wait_common(struct lwp *l, register_t *retval, int epfd,
+    struct linux_epoll_event *events, int maxevents, int timeout,
+    linux_sigset_t *lss)
 {
 	struct timespec ts, *tsp;
 
@@ -374,18 +381,24 @@ linux_epoll_wait_common(struct thread *td, int epfd, struct epoll_event *events,
 	} else {
 		tsp = NULL;
 	}
-	return (linux_epoll_wait_ts(td, epfd, events, maxevents, tsp, uset));
+	return linux_epoll_wait_ts(l, retval, epfd, events, maxevents, tsp, lss);
 
 }
 
 int
-linux_sys_epoll_wait(struct thread *td, struct linux_epoll_wait_args *args)
+linux_sys_epoll_wait(struct lwp *l, const struct linux_sys_epoll_wait_args *uap, register_t *retval)
 {
+	/* {
+		syscallarg(int) epfd;
+		syscallarg(struct linux_epoll_event *) events;
+		syscallarg(int) maxevents;
+		syscallarg(int) timeout;
+	} */
 
-	return (linux_epoll_wait_common(td, args->epfd, args->events,
-	    args->maxevents, args->timeout, NULL));
+	return linux_epoll_wait_common(l, retval, SCARG(uap, epfd), SCARG(uap, events),
+	    SCARG(uap, maxevents), SCARG(uap, timeout), NULL);
 }
-
+#if 0
 int
 linux_sys_epoll_pwait(struct thread *td, struct linux_epoll_pwait_args *args)
 {

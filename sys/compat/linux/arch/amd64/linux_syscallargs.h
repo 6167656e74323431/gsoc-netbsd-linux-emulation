@@ -918,6 +918,14 @@ struct linux_sys_exit_group_args {
 };
 check_syscall_args(linux_sys_exit_group)
 
+struct linux_sys_epoll_wait_args {
+	syscallarg(int) epfd;
+	syscallarg(struct linux_epoll_event *) events;
+	syscallarg(int) maxevents;
+	syscallarg(int) timeout;
+};
+check_syscall_args(linux_sys_epoll_wait)
+
 struct linux_sys_epoll_ctl_args {
 	syscallarg(int) epfd;
 	syscallarg(int) op;
@@ -1559,6 +1567,8 @@ int	linux_sys_clock_getres(struct lwp *, const struct linux_sys_clock_getres_arg
 int	linux_sys_clock_nanosleep(struct lwp *, const struct linux_sys_clock_nanosleep_args *, register_t *);
 
 int	linux_sys_exit_group(struct lwp *, const struct linux_sys_exit_group_args *, register_t *);
+
+int	linux_sys_epoll_wait(struct lwp *, const struct linux_sys_epoll_wait_args *, register_t *);
 
 int	linux_sys_epoll_ctl(struct lwp *, const struct linux_sys_epoll_ctl_args *, register_t *);
 

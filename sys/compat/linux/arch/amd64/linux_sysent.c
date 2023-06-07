@@ -1092,8 +1092,10 @@ struct sysent linux_sysent[] = {
 		.sy_call = (sy_call_t *)linux_sys_exit_group
 	},		/* 231 = exit_group */
 	{
-		.sy_call = linux_sys_nosys,
-	},		/* 232 = filler */
+		ns(struct linux_sys_epoll_wait_args),
+		.sy_flags = SYCALL_ARG_PTR,
+		.sy_call = (sy_call_t *)linux_sys_epoll_wait
+	},		/* 232 = epoll_wait */
 	{
 		ns(struct linux_sys_epoll_ctl_args),
 		.sy_flags = SYCALL_ARG_PTR,

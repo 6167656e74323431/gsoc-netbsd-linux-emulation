@@ -442,7 +442,9 @@
 			    int flags, struct linux_timespec *rqtp, \
 			    struct linux_timespec *rmtp); }
 231	STD		{ int|linux_sys||exit_group(int error_code); }
-232	UNIMPL		epoll_wait
+232	STD		{ int|linux_sys||epoll_wait(int epfd, \
+			    struct linux_epoll_event *events, int maxevents, \
+			    int timeout); }
 233	STD		{ int|linux_sys||epoll_ctl(int epfd, int op, int fd, \
 			    struct linux_epoll_event *event); }
 234	STD		{ int|linux_sys||tgkill(int tgid, int tid, int sig); }
