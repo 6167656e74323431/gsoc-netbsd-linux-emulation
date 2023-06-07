@@ -1608,6 +1608,16 @@ systrace_args(register_t sysnum, const void *params, uintptr_t *uarg, size_t *n_
 		*n_args = 1;
 		break;
 	}
+	/* linux_sys_epoll_ctl */
+	case 233: {
+		const struct linux_sys_epoll_ctl_args *p = params;
+		iarg[0] = SCARG(p, epfd); /* int */
+		iarg[1] = SCARG(p, op); /* int */
+		iarg[2] = SCARG(p, fd); /* int */
+		uarg[3] = (intptr_t) SCARG(p, event); /* struct linux_epoll_event * */
+		*n_args = 4;
+		break;
+	}
 	/* linux_sys_tgkill */
 	case 234: {
 		const struct linux_sys_tgkill_args *p = params;
@@ -4583,6 +4593,25 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			break;
 		};
 		break;
+	/* linux_sys_epoll_ctl */
+	case 233:
+		switch(ndx) {
+		case 0:
+			p = "int";
+			break;
+		case 1:
+			p = "int";
+			break;
+		case 2:
+			p = "int";
+			break;
+		case 3:
+			p = "struct linux_epoll_event *";
+			break;
+		default:
+			break;
+		};
+		break;
 	/* linux_sys_tgkill */
 	case 234:
 		switch(ndx) {
@@ -6153,6 +6182,11 @@ systrace_return_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 		break;
 	/* linux_sys_exit_group */
 	case 231:
+		if (ndx == 0 || ndx == 1)
+			p = "int";
+		break;
+	/* linux_sys_epoll_ctl */
+	case 233:
 		if (ndx == 0 || ndx == 1)
 			p = "int";
 		break;

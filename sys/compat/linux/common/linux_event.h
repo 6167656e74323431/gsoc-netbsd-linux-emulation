@@ -54,4 +54,15 @@
 #define	LINUX_EPOLL_CTL_DEL	2
 #define	LINUX_EPOLL_CTL_MOD	3
 
+typedef uint64_t	epoll_udata_t;
+
+struct linux_epoll_event {
+	uint32_t	events;
+	epoll_udata_t	data;
+}
+#if defined(__amd64__)
+__attribute__((packed))
+#endif
+;
+
 #endif	/* !_LINUX_EVENT_H */

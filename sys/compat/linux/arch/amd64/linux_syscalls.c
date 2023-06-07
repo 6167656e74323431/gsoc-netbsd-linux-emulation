@@ -299,7 +299,7 @@ const char *const linux_syscallnames[] = {
 	/* 230 */	"clock_nanosleep",
 	/* 231 */	"exit_group",
 	/* 232 */	"#232 (unimplemented epoll_wait)",
-	/* 233 */	"#233 (unimplemented epoll_ctl)",
+	/* 233 */	"epoll_ctl",
 	/* 234 */	"tgkill",
 	/* 235 */	"utimes",
 	/* 236 */	"#236 (unimplemented vserver)",
@@ -843,7 +843,7 @@ const char *const altlinux_syscallnames[] = {
 	/* 230 */	NULL, /* clock_nanosleep */
 	/* 231 */	NULL, /* exit_group */
 	/* 232 */	NULL, /* unimplemented epoll_wait */
-	/* 233 */	NULL, /* unimplemented epoll_ctl */
+	/* 233 */	NULL, /* epoll_ctl */
 	/* 234 */	NULL, /* tgkill */
 	/* 235 */	NULL, /* utimes */
 	/* 236 */	NULL, /* unimplemented vserver */

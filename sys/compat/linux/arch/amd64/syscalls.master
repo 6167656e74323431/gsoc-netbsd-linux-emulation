@@ -443,7 +443,8 @@
 			    struct linux_timespec *rmtp); }
 231	STD		{ int|linux_sys||exit_group(int error_code); }
 232	UNIMPL		epoll_wait
-233	UNIMPL		epoll_ctl
+233	STD		{ int|linux_sys||epoll_ctl(int epfd, int op, int fd, \
+			    struct linux_epoll_event *event); }
 234	STD		{ int|linux_sys||tgkill(int tgid, int tid, int sig); }
 235	NOARGS		{ int|compat_50_sys||utimes(const char *path, \
 			    const struct timeval50 *tptr); }

@@ -606,6 +606,9 @@
 /* syscall: "exit_group" ret: "int" args: "int" */
 #define	LINUX_SYS_exit_group	231
 
+/* syscall: "epoll_ctl" ret: "int" args: "int" "int" "int" "struct linux_epoll_event *" */
+#define	LINUX_SYS_epoll_ctl	233
+
 /* syscall: "tgkill" ret: "int" args: "int" "int" "int" */
 #define	LINUX_SYS_tgkill	234
 

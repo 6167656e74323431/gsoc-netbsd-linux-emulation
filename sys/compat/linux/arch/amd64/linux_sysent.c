@@ -1095,8 +1095,10 @@ struct sysent linux_sysent[] = {
 		.sy_call = linux_sys_nosys,
 	},		/* 232 = filler */
 	{
-		.sy_call = linux_sys_nosys,
-	},		/* 233 = filler */
+		ns(struct linux_sys_epoll_ctl_args),
+		.sy_flags = SYCALL_ARG_PTR,
+		.sy_call = (sy_call_t *)linux_sys_epoll_ctl
+	},		/* 233 = epoll_ctl */
 	{
 		ns(struct linux_sys_tgkill_args),
 		.sy_call = (sy_call_t *)linux_sys_tgkill

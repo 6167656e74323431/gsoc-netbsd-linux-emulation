@@ -918,6 +918,14 @@ struct linux_sys_exit_group_args {
 };
 check_syscall_args(linux_sys_exit_group)
 
+struct linux_sys_epoll_ctl_args {
+	syscallarg(int) epfd;
+	syscallarg(int) op;
+	syscallarg(int) fd;
+	syscallarg(struct linux_epoll_event *) event;
+};
+check_syscall_args(linux_sys_epoll_ctl)
+
 struct linux_sys_tgkill_args {
 	syscallarg(int) tgid;
 	syscallarg(int) tid;
@@ -1551,6 +1559,8 @@ int	linux_sys_clock_getres(struct lwp *, const struct linux_sys_clock_getres_arg
 int	linux_sys_clock_nanosleep(struct lwp *, const struct linux_sys_clock_nanosleep_args *, register_t *);
 
 int	linux_sys_exit_group(struct lwp *, const struct linux_sys_exit_group_args *, register_t *);
+
+int	linux_sys_epoll_ctl(struct lwp *, const struct linux_sys_epoll_ctl_args *, register_t *);
 
 int	linux_sys_tgkill(struct lwp *, const struct linux_sys_tgkill_args *, register_t *);
 
