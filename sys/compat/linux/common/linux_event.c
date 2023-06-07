@@ -63,8 +63,9 @@ static int	epoll_delete_all_events(register_t *retval, int epfd,
 		    int fd);
 
 struct epoll_copyout_args {
-	struct linux_epoll_event	*leventlist;
-	int				error;
+	struct linux_epoll_event *leventlist;
+	int			 count;
+	int			 error;
 };
 
 int
@@ -200,9 +201,10 @@ epoll_kev_copyout(void *ctx, struct kevent *events,
 		kevent_to_epoll(events + index + i, eep + i);
 
 	error = copyout(eep, args->leventlist, levent_size);
-	if (error == 0)
+	if (error == 0) {
 		args->leventlist += n;
-	else if (args->error == 0)
+		args->count += n;
+	} else if (args->error == 0)
 		args->error = error;
 
 	kmem_free(eep, levent_size);
@@ -344,18 +346,19 @@ linux_epoll_wait_ts(struct lwp *l, register_t *retval, int epfd,
 	}
 
 	coargs.leventlist = events;
+	coargs.count = 0;
 	coargs.error = 0;
 
 	error = kevent1(retval, epfd, NULL, 0, NULL, maxevents, tsp, &k_ops);
 	if (error == 0 && coargs.error != 0)
 		error = coargs.error;
 
-//	/*
-//	 * kern_kevent might return ENOMEM which is not expected from epoll_wait.
-//	 * Maybe we should translate that but I don't think it matters at all.
-//	 */
-//	if (error == 0)
-//		td->td_retval[0] = coargs.count;
+	/*
+	 * kern_kevent might return ENOMEM which is not expected from epoll_wait.
+	 * Maybe we should translate that but I don't think it matters at all.
+	 */
+	if (error == 0)
+		*retval = coargs.count;
 
 	if (lssp != NULL) {
 	        mutex_enter(p->p_lock);
@@ -387,7 +390,6 @@ linux_epoll_wait_common(struct lwp *l, register_t *retval, int epfd,
 		tsp = NULL;
 	}
 	return linux_epoll_wait_ts(l, retval, epfd, events, maxevents, tsp, lssp);
-
 }
 
 int
