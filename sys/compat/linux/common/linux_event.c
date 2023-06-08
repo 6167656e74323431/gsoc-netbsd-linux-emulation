@@ -30,6 +30,8 @@
 #include <sys/types.h>
 #include <sys/event.h>
 #include <sys/errno.h>
+#include <sys/file.h>
+#include <sys/filedesc.h>
 #include <sys/fcntl.h>
 #include <sys/proc.h>
 #include <sys/signal.h>
@@ -255,6 +257,7 @@ linux_sys_epoll_ctl(struct lwp *l, const struct linux_sys_epoll_ctl_args *uap, r
 		.keo_fetch_changes = epoll_kev_copyin,
 		.keo_put_events = NULL,
 	};
+	file_t *epfp, *fp;
 	int error, nchanges = 0;
 	const int epfd = SCARG(uap, epfd);
 	const int op = SCARG(uap, op);
@@ -266,8 +269,21 @@ linux_sys_epoll_ctl(struct lwp *l, const struct linux_sys_epoll_ctl_args *uap, r
 			return (error);
 	}
 
-	// TODO: check validity of epfd
-	// TODO: check validity of fd
+	/* Need to validate epfd and fd separately from kevent1 to match
+	   Linux's errno behaviour. */
+	epfp = fd_getfile(epfd);
+	if (epfp == NULL)
+		return EBADF;
+	if (epfp->f_type != DTYPE_KQUEUE) {
+		fd_putfile(epfd);
+		return EINVAL;
+	}
+	fd_putfile(epfd);
+
+	fp = fd_getfile(fd);
+	if (fp == NULL)
+		return EBADF;
+	fd_putfile(fd);
 
 	/* Linux disallows spying on himself */
 	if (epfd == fd) {
@@ -301,7 +317,11 @@ linux_sys_epoll_ctl(struct lwp *l, const struct linux_sys_epoll_ctl_args *uap, r
 		return EINVAL;
 	}
 
-	error = kevent1(retval, SCARG(uap, epfd), kev, nchanges, NULL, 0, NULL, &k_ops);
+	error = kevent1(retval, epfd, kev, nchanges, NULL, 0, NULL, &k_ops);
+
+	if (error == EOPNOTSUPP) {
+		error = EPERM;
+	}
 
 	return (error);
 }
@@ -323,6 +343,7 @@ linux_epoll_wait_ts(struct lwp *l, register_t *retval, int epfd,
 		.keo_put_events = epoll_kev_copyout,
 	};
 	struct proc *p = l->l_proc;
+	file_t *epfp;
 	sigset_t nss, oss;
 	linux_sigset_t lss;
 	int error;
@@ -330,8 +351,17 @@ linux_epoll_wait_ts(struct lwp *l, register_t *retval, int epfd,
 	if (maxevents <= 0 || maxevents > LINUX_MAX_EVENTS)
 		return (EINVAL);
 
-	// TODO: validate epfd
-	
+	/* Need to validate epfd separately from kevent1 to match
+	   Linux's errno behaviour. */
+	epfp = fd_getfile(epfd);
+	if (epfp == NULL)
+		return EBADF;
+	if (epfp->f_type != DTYPE_KQUEUE) {
+		fd_putfile(epfd);
+		return EINVAL;
+	}
+	fd_putfile(epfd);
+
 	if (lssp != NULL) {
 		error = copyin(lssp, &lss, sizeof(lss));
 		if (error != 0)
