@@ -70,6 +70,16 @@ struct kevent {
 	uint32_t	fflags;		/* filter flag value */
 	int64_t		data;		/* filter data value */
 	void		*udata;		/* opaque user data identifier */
+	uint64_t	ext[4];		/* extensions */
+};
+
+struct kevent100 {
+	uintptr_t	ident;		/* identifier for this event */
+	uint32_t	filter;		/* filter for event */
+	uint32_t	flags;		/* action flags for kqueue */
+	uint32_t	fflags;		/* filter flag value */
+	int64_t		data;		/* filter data value */
+	void		*udata;		/* opaque user data identifier */
 };
 
 static __inline void
@@ -349,7 +359,7 @@ int	kqueue(void);
 int	kqueue1(int);
 #ifndef __LIBC12_SOURCE__
 int	kevent(int, const struct kevent *, size_t, struct kevent *, size_t,
-		    const struct timespec *) __RENAME(__kevent50);
+		    const struct timespec *) __RENAME(__kevent100);
 #endif
 #endif /* !_POSIX_C_SOURCE */
 __END_DECLS

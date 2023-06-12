@@ -44,6 +44,7 @@ __KERNEL_RCSID(0, "$NetBSD: kern_select_50.c,v 1.3 2019/09/20 15:05:22 kamil Exp
 #include <sys/syscallvar.h>
 #include <sys/syscallargs.h>
 
+#include <compat/sys/event.h>
 #include <compat/sys/time.h>
 #include <compat/common/compat_mod.h>
 
@@ -76,12 +77,18 @@ compat_50_sys_kevent(struct lwp *l, const struct compat_50_sys_kevent_args *uap,
 {
 	/* {
 		syscallarg(int) fd;
-		syscallarg(keventp_t) changelist;
+		syscallarg(struct kevent100 *) changelist;
 		syscallarg(size_t) nchanges;
-		syscallarg(keventp_t) eventlist;
+		syscallarg(struct kevent100 *) eventlist;
 		syscallarg(size_t) nevents;
 		syscallarg(struct timespec50) timeout;
 	} */
+#ifdef COMPAT_100
+	return compat_100_kevent1(retval, SCARG(uap, fd), SCARG(uap, changelist),
+	    SCARG(uap, nchanges), SCARG(uap, eventlist), SCARG(uap, nevents),
+	    (const struct timespec *)(const void *)SCARG(uap, timeout),
+	    compat_50_kevent_fetch_timeout);
+#else
 	static const struct kevent_ops compat_50_kevent_ops = {
 		.keo_private = NULL,
 		.keo_fetch_timeout = compat_50_kevent_fetch_timeout,
@@ -93,6 +100,7 @@ compat_50_sys_kevent(struct lwp *l, const struct compat_50_sys_kevent_args *uap,
 	    SCARG(uap, nchanges), SCARG(uap, eventlist), SCARG(uap, nevents),
 	    (const struct timespec *)(const void *)SCARG(uap, timeout),
 	    &compat_50_kevent_ops);
+#endif
 }
 
 int

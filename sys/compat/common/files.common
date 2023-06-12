@@ -112,6 +112,7 @@ file	compat/common/vfs_syscalls_90.c		compat_90
 
 # Compatibility code for NetBSD 10.0
 file	compat/common/compat_100_mod.c		compat_100
+file	compat/common/kern_event_100.c		compat_100
 
 #
 # Sources for sysv ipc compatibility across the versions.

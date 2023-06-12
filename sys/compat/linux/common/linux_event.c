@@ -147,15 +147,13 @@ epoll_to_kevent(int fd, struct linux_epoll_event *l_event,
 	/* flags related to what event is registered */
 	if ((levents & LINUX_EPOLL_EVRD) != 0) {
 		EV_SET(kevent, fd, EVFILT_READ, kev_flags, 0, 0, 0);
-//		kevent->ext[0] = l_event->data;
-		kevent->udata = (void *)l_event->data; // TODO hack and wrong
+		kevent->ext[0] = l_event->data;
 		++kevent;
 		++(*nkevents);
 	}
 	if ((levents & LINUX_EPOLL_EVWR) != 0) {
 		EV_SET(kevent, fd, EVFILT_WRITE, kev_flags, 0, 0, 0);
-//		kevent->ext[0] = l_event->data;
-		kevent->udata = (void *)l_event->data; // TODO hack and wrong
+		kevent->ext[0] = l_event->data;
 		++kevent;
 		++(*nkevents);
 	}
@@ -181,8 +179,7 @@ static void
 kevent_to_epoll(struct kevent *kevent, struct linux_epoll_event *l_event)
 {
 
-//	l_event->data = kevent->ext[0];
-	l_event->data = (epoll_udata_t)kevent->udata; // TODO hack and wrong
+	l_event->data = kevent->ext[0];
 
 	if ((kevent->flags & EV_ERROR) != 0) {
 		l_event->events = LINUX_EPOLLERR;

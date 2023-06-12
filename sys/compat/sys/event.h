@@ -34,11 +34,19 @@
 #include <sys/cdefs.h>
 struct timespec;
 
+#if defined(_KERNEL) && defined(COMPAT_100)
+int compat_100_kevent1(register_t *retval, int fd, const struct kevent100 *changelist,
+    size_t nchanges, struct kevent100 *eventlist, size_t nevents,
+    const struct timespec *timeout, copyin_t fetch_timeout);
+#endif
+
 __BEGIN_DECLS
-int	kevent(int, const struct kevent *, size_t, struct kevent *, size_t,
-    const struct timespec50 *);
-int	__kevent50(int, const struct kevent *, size_t, struct kevent *, size_t,
-    const struct timespec *);
+int	kevent(int, const struct kevent100 *, size_t, struct kevent100 *,
+    size_t, const struct timespec50 *);
+int	__kevent50(int, const struct kevent100 *, size_t, struct kevent100 *,
+    size_t, const struct timespec *);
+int	__kevent100(int, const struct kevent *, size_t, struct kevent *,
+    size_t, const struct timespec *);
 __END_DECLS
 
 #endif /* !_COMPAT_SYS_EVENT_H_ */
