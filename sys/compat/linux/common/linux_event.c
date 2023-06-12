@@ -92,7 +92,7 @@ linux_sys_epoll_create(struct lwp *l, const struct linux_sys_epoll_create_args *
 	 * and then forgets it as well.
 	 */
 	if (SCARG(uap, size) <= 0)
-		return (EINVAL);
+		return EINVAL;
 
 	return sys_kqueue(l, NULL, retval);
 }
@@ -109,7 +109,7 @@ linux_sys_epoll_create1(struct lwp *l, const struct linux_sys_epoll_create1_args
 	struct sys_kqueue1_args kqa;
 
 	if ((SCARG(uap, flags) & ~(LINUX_O_CLOEXEC)) != 0)
-		return (EINVAL);
+		return EINVAL;
 
 	SCARG(&kqa, flags) = 0;
 	if ((SCARG(uap, flags) & LINUX_O_CLOEXEC) != 0)
@@ -163,7 +163,7 @@ epoll_to_kevent(int fd, struct linux_epoll_event *l_event,
 		return EINVAL;
 	}
 
-	return (0);
+	return 0;
 }
 
 /*
@@ -225,7 +225,7 @@ epoll_kev_put_events(void *ctx, struct kevent *events,
 		args->error = error;
 
 	kmem_free(eep, levent_size);
-	return (error);
+	return error;
 }
 
 /*
@@ -286,7 +286,7 @@ linux_sys_epoll_ctl(struct lwp *l, const struct linux_sys_epoll_ctl_args *uap, r
 	if (op != LINUX_EPOLL_CTL_DEL) {
 		error = copyin(SCARG(uap, event), &le, sizeof(le));
 		if (error != 0)
-			return (error);
+			return error;
 	}
 
 	/* Need to validate epfd and fd separately from kevent1 to match
@@ -343,7 +343,7 @@ linux_sys_epoll_ctl(struct lwp *l, const struct linux_sys_epoll_ctl_args *uap, r
 		error = EPERM;
 	}
 
-	return (error);
+	return error;
 }
 
 /*
@@ -369,7 +369,7 @@ epoll_wait_ts(struct lwp *l, register_t *retval, int epfd,
 	int error;
 
 	if (maxevents <= 0 || maxevents > LINUX_MAX_EVENTS)
-		return (EINVAL);
+		return EINVAL;
 
 	/* Need to validate epfd separately from kevent1 to match
 	   Linux's errno behaviour. */
@@ -417,7 +417,7 @@ epoll_wait_ts(struct lwp *l, register_t *retval, int epfd,
 		mutex_exit(p->p_lock);
 	}
 
-	return (error);
+	return error;
 }
 
 /*
@@ -549,9 +549,9 @@ epoll_fd_registered(register_t *retval, int epfd, int fd)
 	 */
 	if (epoll_register_kevent(retval, epfd, fd, EVFILT_READ, 0) != ENOENT ||
 	    epoll_register_kevent(retval, epfd, fd, EVFILT_WRITE, 0) != ENOENT)
-		return (1);
+		return 1;
 
-	return (0);
+	return 0;
 }
 
 /*
@@ -567,5 +567,5 @@ epoll_delete_all_events(register_t *retval, int epfd, int fd)
 	error2 = epoll_register_kevent(retval, epfd, fd, EVFILT_WRITE, EV_DELETE);
 
 	/* return 0 if at least one result positive */
-	return (error1 == 0 ? 0 : error2);
+	return error1 == 0 ? 0 : error2;
 }
