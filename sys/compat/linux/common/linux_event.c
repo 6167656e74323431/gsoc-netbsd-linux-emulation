@@ -48,6 +48,12 @@
 
 #define	LINUX_MAX_EVENTS	(INT_MAX / sizeof(struct linux_epoll_event))
 
+#if DEBUG_LINUX
+#define DPRINTF(x) uprintf x
+#else
+#define DPRINTF(x)
+#endif
+
 static int	epoll_to_kevent(int fd,
 		    struct linux_epoll_event *l_event, struct kevent *kevent,
 		    int *nkevents);
@@ -192,6 +198,10 @@ kevent_to_epoll(struct kevent *kevent, struct linux_epoll_event *l_event)
 		break;
 	case EVFILT_WRITE:
 		l_event->events = LINUX_EPOLLOUT;
+		break;
+	default:
+		DPRINTF(("kevent_to_epoll: unhandled kevent filter %d\n",
+		    kevent->filter));
 		break;
 	}
 }
@@ -338,6 +348,7 @@ linux_sys_epoll_ctl(struct lwp *l, const struct linux_sys_epoll_ctl_args *uap, r
 		return epoll_delete_all_events(retval, epfd, fd);
 
 	default:
+		DPRINTF(("linux_sys_epoll_ctl: invalid op %d\n", op));
 		return EINVAL;
 	}
 
