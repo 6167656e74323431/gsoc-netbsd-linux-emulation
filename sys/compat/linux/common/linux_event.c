@@ -126,7 +126,7 @@ epoll_to_kevent(int fd, struct linux_epoll_event *l_event,
     struct kevent *kevent, int *nkevents)
 {
 	uint32_t levents = l_event->events;
-	unsigned short kev_flags = EV_ADD | EV_ENABLE;
+	uint32_t kev_flags = EV_ADD | EV_ENABLE;
 
 	/* flags related to how event is registered */
 	if ((levents & LINUX_EPOLLONESHOT) != 0)
