@@ -211,6 +211,8 @@ epoll_kev_put_events(void *ctx, struct kevent *events,
 	int error, i;
 	size_t levent_size = sizeof(*eep) * n;
 
+	KASSERT(n >= 0 && n < LINUX_MAX_EVENTS);
+
 	args = (struct epoll_copyout_args *)ctx;
 	eep = kmem_alloc(levent_size, KM_SLEEP);
 
@@ -238,6 +240,8 @@ static int
 epoll_kev_fetch_changes(void *ctx, const struct kevent *changelist,
     struct kevent *changes, size_t index, int n)
 {
+	KASSERT(n >= 0 && n < LINUX_MAX_EVENTS);
+
 	memcpy(changes, changelist + index, n * sizeof(*changes));
 
 	return 0;
