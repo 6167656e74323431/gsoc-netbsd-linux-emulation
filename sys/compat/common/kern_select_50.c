@@ -83,24 +83,18 @@ compat_50_sys_kevent(struct lwp *l, const struct compat_50_sys_kevent_args *uap,
 		syscallarg(size_t) nevents;
 		syscallarg(struct timespec50) timeout;
 	} */
-#ifdef COMPAT_100
-	return compat_100_kevent1(retval, SCARG(uap, fd), SCARG(uap, changelist),
-	    SCARG(uap, nchanges), SCARG(uap, eventlist), SCARG(uap, nevents),
-	    (const struct timespec *)(const void *)SCARG(uap, timeout),
-	    compat_50_kevent_fetch_timeout);
-#else
 	static const struct kevent_ops compat_50_kevent_ops = {
 		.keo_private = NULL,
 		.keo_fetch_timeout = compat_50_kevent_fetch_timeout,
-		.keo_fetch_changes = kevent_fetch_changes,
-		.keo_put_events = kevent_put_events,
+		.keo_fetch_changes = kevent100_fetch_changes,
+		.keo_put_events = kevent100_put_events,
 	};
 
-	return kevent1(retval, SCARG(uap, fd), SCARG(uap, changelist),
-	    SCARG(uap, nchanges), SCARG(uap, eventlist), SCARG(uap, nevents),
+	return kevent1(retval, SCARG(uap, fd),
+	    (const struct kevent *)(const void *)SCARG(uap, changelist), SCARG(uap, nchanges),
+	    (struct kevent *)(void *)SCARG(uap, eventlist), SCARG(uap, nevents),
 	    (const struct timespec *)(const void *)SCARG(uap, timeout),
 	    &compat_50_kevent_ops);
-#endif
 }
 
 int

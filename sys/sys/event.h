@@ -73,15 +73,6 @@ struct kevent {
 	uint64_t	ext[4];		/* extensions */
 };
 
-struct kevent100 {
-	uintptr_t	ident;		/* identifier for this event */
-	uint32_t	filter;		/* filter for event */
-	uint32_t	flags;		/* action flags for kqueue */
-	uint32_t	fflags;		/* filter flag value */
-	int64_t		data;		/* filter data value */
-	void		*udata;		/* opaque user data identifier */
-};
-
 static __inline void
 _EV_SET(struct kevent *_kevp, uintptr_t _ident, uint32_t _filter,
     uint32_t _flags, uint32_t _fflags, int64_t _data, void *_udata)

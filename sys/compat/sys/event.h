@@ -34,10 +34,39 @@
 #include <sys/cdefs.h>
 struct timespec;
 
-#if defined(_KERNEL) && defined(COMPAT_100)
-int compat_100_kevent1(register_t *retval, int fd, const struct kevent100 *changelist,
-    size_t nchanges, struct kevent100 *eventlist, size_t nevents,
-    const struct timespec *timeout, copyin_t fetch_timeout);
+#ifdef _KERNEL
+#include <lib/libkern/libkern.h>
+#else
+#include <string.h>
+#endif
+
+struct kevent100 {
+	uintptr_t	ident;		/* identifier for this event */
+	uint32_t	filter;		/* filter for event */
+	uint32_t	flags;		/* action flags for kqueue */
+	uint32_t	fflags;		/* filter flag value */
+	int64_t		data;		/* filter data value */
+	void		*udata;		/* opaque user data identifier */
+};
+
+static __inline void
+kevent100_to_kevent(const struct kevent100 *kev100, struct kevent *kev)
+{
+	memset(kev, 0, sizeof(*kev));
+	memcpy(kev, kev100, sizeof(*kev100));
+}
+
+static __inline void
+kevent_to_kevent100(const struct kevent *kev, struct kevent100 *kev100)
+{
+	memcpy(kev100, kev, sizeof(*kev100));
+}
+
+#ifdef _KERNEL
+int	kevent100_fetch_changes(void *ctx, const struct kevent *changelist,
+    struct kevent *changes, size_t index, int n);
+int	kevent100_put_events(void *ctx, struct kevent *events,
+    struct kevent *eventlist, size_t index, int n);
 #endif
 
 __BEGIN_DECLS

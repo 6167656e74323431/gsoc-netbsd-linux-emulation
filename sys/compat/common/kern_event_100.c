@@ -16,77 +16,51 @@ static const struct syscall_package kern_event_100_syscalls[] = {
 	{ 0, 0, NULL },
 };
 
-static int compat_100_kevent_fetch_changes(void *ctx,
-    const struct kevent *changelist, struct kevent *changes, size_t index, int n);
-static int compat_100_kevent_put_events(void *ctx, struct kevent *events,
-    struct kevent *eventlist, size_t index, int n);
-
-struct compat_100_kevent_ops_args {
-	const struct kevent100 *changelist;
-	struct kevent100 *eventlist;
-};
-
-static int
-compat_100_kevent_fetch_changes(void *ctx, const struct kevent *changelist,
+int
+kevent100_fetch_changes(void *ctx, const struct kevent *changelist,
     struct kevent *changes, size_t index, int n)
 {
-	struct compat_100_kevent_ops_args *args;
 	int error, i;
+	struct kevent100 *buf;
+	const size_t buf_size = sizeof(*buf) * n;
+	const struct kevent100 *changelist100 = (const struct kevent100 *)changelist;
 
-	/* Zero out ext fields. */
-	memset(changes, 0, n * sizeof(*changes));
+	KASSERT(n >= 0);
 
-	args = (struct compat_100_kevent_ops_args *)ctx;
+	buf = kmem_alloc(buf_size, KM_SLEEP);
 
-	for (i = 0; i < n; i++) {
-		error = copyin(args->changelist + i, changes + i,
-		    sizeof(*(args->changelist)));
-		if (error != 0)
-			return error;
-	}
+	error = copyin(changelist100 + index, buf, buf_size);
+	if (error != 0)
+		goto leave;
 
-	args->changelist += n;
-	return error;
-}
+	for (i = 0; i < n; i++)
+		kevent100_to_kevent(buf + i, changes + i);
 
-static int
-compat_100_kevent_put_events(void *ctx, struct kevent *events,
-    struct kevent *eventlist, size_t index, int n)
-{
-	struct compat_100_kevent_ops_args *args;
-	int error, i;
-
-	args = (struct compat_100_kevent_ops_args *)ctx;
-
-	for (i = 0; i < n; i++) {
-		error = copyout(events + i, args->eventlist + index + i,
-		    sizeof(*(args->eventlist)));
-		if (error != 0)
-			return error;
-	}
-
-	args->eventlist += n;
+leave:
+	kmem_free(buf, buf_size);
 	return error;
 }
 
 int
-compat_100_kevent1(register_t *retval, int fd, const struct kevent100 *changelist,
-    size_t nchanges, struct kevent100 *eventlist, size_t nevents,
-    const struct timespec *timeout, copyin_t fetch_timeout)
+kevent100_put_events(void *ctx, struct kevent *events,
+    struct kevent *eventlist, size_t index, int n)
 {
-        struct compat_100_kevent_ops_args args = {
-		.changelist = changelist,
-		.eventlist = eventlist,
-	};
-	const struct kevent_ops k_ops = {
-		.keo_private = &args,
-		.keo_fetch_timeout = fetch_timeout,
-		.keo_fetch_changes = compat_100_kevent_fetch_changes,
-		.keo_put_events = compat_100_kevent_put_events,
-	};
-	
-	return kevent1(retval, fd, NULL, nchanges, NULL, nevents, timeout,
-	    &k_ops);
+	int error, i;
+        struct kevent100 *buf;
+	const size_t buf_size = sizeof(*buf) * n;
+	struct kevent100 *eventlist100 = (struct kevent100 *)eventlist;
+
+	KASSERT(n >= 0);
+
+	buf = kmem_alloc(buf_size, KM_SLEEP);
+
+	for (i = 0; i < n; i++)
+	        kevent_to_kevent100(events + i, buf + i);
+
+	error = copyout(buf, eventlist100 + index, buf_size);
+
+	kmem_free(buf, buf_size);
+	return error;
 }
 
 int
@@ -101,20 +75,17 @@ compat_100_sys___kevent50(struct lwp *l, const struct compat_100_sys___kevent50_
 		syscallarg(size_t) nevents;
 		syscallarg(const struct timespec *) timeout;
 	} */
-	struct compat_100_kevent_ops_args args = {
-		.changelist = SCARG(uap, changelist),
-		.eventlist = SCARG(uap, eventlist),
-	};
-	const struct kevent_ops k_ops = {
-		.keo_private = &args,
+	static const struct kevent_ops compat_100_kevent_ops = {
+		.keo_private = NULL,
 		.keo_fetch_timeout = copyin,
-		.keo_fetch_changes = compat_100_kevent_fetch_changes,
-		.keo_put_events = compat_100_kevent_put_events,
+		.keo_fetch_changes = kevent100_fetch_changes,
+		.keo_put_events = kevent100_put_events,
 	};
 
 	return kevent1(retval, SCARG(uap, fd),
-	    NULL, SCARG(uap, nchanges), NULL, SCARG(uap, nevents),
-	    SCARG(uap, timeout), &k_ops);
+	    (const struct kevent *)SCARG(uap, changelist), SCARG(uap, nchanges),
+	    (struct kevent *)SCARG(uap, eventlist), SCARG(uap, nevents),
+	    SCARG(uap, timeout), &compat_100_kevent_ops);
 }
 
 int
