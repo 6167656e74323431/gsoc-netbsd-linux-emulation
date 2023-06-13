@@ -101,7 +101,7 @@ int	_sys_fcntl(int, int, ...);
 int	_sys_fdatasync(int);
 int	_sys_fsync(int);
 int	_sys_fsync_range(int, int, off_t, off_t);
-int	_sys___kevent50(int, const struct kevent *, size_t, struct kevent *,
+int	_sys___kevent100(int, const struct kevent *, size_t, struct kevent *,
 	    size_t, const struct timespec *);
 int	_sys_mq_send(mqd_t, const char *, size_t, unsigned);
 ssize_t	_sys_mq_receive(mqd_t, char *, size_t, unsigned *);
@@ -180,7 +180,7 @@ __aio_suspend50(const struct aiocb * const list[], int nent,
 }
 
 int
-__kevent50(int fd, const struct kevent *ev, size_t nev, struct kevent *rev,
+__kevent100(int fd, const struct kevent *ev, size_t nev, struct kevent *rev,
     size_t nrev, const struct timespec *ts)
 {
 	int retval;
@@ -188,7 +188,7 @@ __kevent50(int fd, const struct kevent *ev, size_t nev, struct kevent *rev,
 
 	self = pthread__self();
 	TESTCANCEL(self);
-	retval = _sys___kevent50(fd, ev, nev, rev, nrev, ts);
+	retval = _sys___kevent100(fd, ev, nev, rev, nrev, ts);
 	TESTCANCEL(self);
 
 	return retval;
