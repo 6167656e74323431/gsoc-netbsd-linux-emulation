@@ -86,8 +86,8 @@ compat_50_sys_kevent(struct lwp *l, const struct compat_50_sys_kevent_args *uap,
 	static const struct kevent_ops compat_50_kevent_ops = {
 		.keo_private = NULL,
 		.keo_fetch_timeout = compat_50_kevent_fetch_timeout,
-		.keo_fetch_changes = kevent100_fetch_changes,
-		.keo_put_events = kevent100_put_events,
+		.keo_fetch_changes = compat_100___kevent50_fetch_changes,
+		.keo_put_events = compat_100___kevent50_put_events,
 	};
 
 	return kevent1(retval, SCARG(uap, fd),

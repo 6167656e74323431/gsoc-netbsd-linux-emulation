@@ -17,53 +17,6 @@ static const struct syscall_package kern_event_100_syscalls[] = {
 };
 
 int
-kevent100_fetch_changes(void *ctx, const struct kevent *changelist,
-    struct kevent *changes, size_t index, int n)
-{
-	int error, i;
-	struct kevent100 *buf;
-	const size_t buf_size = sizeof(*buf) * n;
-	const struct kevent100 *changelist100 = (const struct kevent100 *)changelist;
-
-	KASSERT(n >= 0);
-
-	buf = kmem_alloc(buf_size, KM_SLEEP);
-
-	error = copyin(changelist100 + index, buf, buf_size);
-	if (error != 0)
-		goto leave;
-
-	for (i = 0; i < n; i++)
-		kevent100_to_kevent(buf + i, changes + i);
-
-leave:
-	kmem_free(buf, buf_size);
-	return error;
-}
-
-int
-kevent100_put_events(void *ctx, struct kevent *events,
-    struct kevent *eventlist, size_t index, int n)
-{
-	int error, i;
-        struct kevent100 *buf;
-	const size_t buf_size = sizeof(*buf) * n;
-	struct kevent100 *eventlist100 = (struct kevent100 *)eventlist;
-
-	KASSERT(n >= 0);
-
-	buf = kmem_alloc(buf_size, KM_SLEEP);
-
-	for (i = 0; i < n; i++)
-	        kevent_to_kevent100(events + i, buf + i);
-
-	error = copyout(buf, eventlist100 + index, buf_size);
-
-	kmem_free(buf, buf_size);
-	return error;
-}
-
-int
 compat_100_sys___kevent50(struct lwp *l, const struct compat_100_sys___kevent50_args *uap,
     register_t *retval)
 {
@@ -78,8 +31,8 @@ compat_100_sys___kevent50(struct lwp *l, const struct compat_100_sys___kevent50_
 	static const struct kevent_ops compat_100_kevent_ops = {
 		.keo_private = NULL,
 		.keo_fetch_timeout = copyin,
-		.keo_fetch_changes = kevent100_fetch_changes,
-		.keo_put_events = kevent100_put_events,
+		.keo_fetch_changes = compat_100___kevent50_fetch_changes,
+		.keo_put_events = compat_100___kevent50_put_events,
 	};
 
 	return kevent1(retval, SCARG(uap, fd),

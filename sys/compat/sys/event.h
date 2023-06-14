@@ -63,11 +63,53 @@ kevent_to_kevent100(const struct kevent *kev, struct kevent100 *kev100)
 }
 
 #ifdef _KERNEL
-int	kevent100_fetch_changes(void *ctx, const struct kevent *changelist,
-    struct kevent *changes, size_t index, int n);
-int	kevent100_put_events(void *ctx, struct kevent *events,
-    struct kevent *eventlist, size_t index, int n);
-#endif
+static int
+compat_100___kevent50_fetch_changes(void *ctx, const struct kevent *changelist,
+    struct kevent *changes, size_t index, int n)
+{
+	int error, i;
+	struct kevent100 *buf;
+	const size_t buf_size = sizeof(*buf) * n;
+	const struct kevent100 *changelist100 = (const struct kevent100 *)changelist;
+
+	KASSERT(n >= 0);
+
+	buf = kmem_alloc(buf_size, KM_SLEEP);
+
+	error = copyin(changelist100 + index, buf, buf_size);
+	if (error != 0)
+		goto leave;
+
+	for (i = 0; i < n; i++)
+		kevent100_to_kevent(buf + i, changes + i);
+
+leave:
+	kmem_free(buf, buf_size);
+	return error;
+}
+
+static int
+compat_100___kevent50_put_events(void *ctx, struct kevent *events,
+    struct kevent *eventlist, size_t index, int n)
+{
+	int error, i;
+        struct kevent100 *buf;
+	const size_t buf_size = sizeof(*buf) * n;
+	struct kevent100 *eventlist100 = (struct kevent100 *)eventlist;
+
+	KASSERT(n >= 0);
+
+	buf = kmem_alloc(buf_size, KM_SLEEP);
+
+	for (i = 0; i < n; i++)
+	        kevent_to_kevent100(events + i, buf + i);
+
+	error = copyout(buf, eventlist100 + index, buf_size);
+
+	kmem_free(buf, buf_size);
+	return error;
+}
+#endif /* _KERNEL */
 
 __BEGIN_DECLS
 int	kevent(int, const struct kevent100 *, size_t, struct kevent100 *,
