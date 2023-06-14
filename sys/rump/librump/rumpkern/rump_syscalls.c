@@ -3509,9 +3509,9 @@ __strong_alias(_sys_kqueue,rump___sysimpl_kqueue);
 #endif /* RUMP_KERNEL_IS_LIBC */
 
 #ifdef RUMP_SYS_COMPAT
-int rump___sysimpl_kevent(int, const struct kevent100 *, size_t, struct kevent100 *, size_t, const struct timespec *);
+int rump___sysimpl_kevent(int, const struct kevent *, size_t, struct kevent *, size_t, const struct timespec *);
 int
-rump___sysimpl_kevent(int fd, const struct kevent100 * changelist, size_t nchanges, struct kevent100 * eventlist, size_t nevents, const struct timespec * timeout)
+rump___sysimpl_kevent(int fd, const struct kevent * changelist, size_t nchanges, struct kevent * eventlist, size_t nevents, const struct timespec * timeout)
 {
 	register_t retval[2];
 	int error = 0;
@@ -3520,9 +3520,9 @@ rump___sysimpl_kevent(int fd, const struct kevent100 * changelist, size_t nchang
 
 	memset(&callarg, 0, sizeof(callarg));
 	SPARG(&callarg, fd) = fd;
-	SPARG(&callarg, changelist) = changelist;
+	SPARG(&callarg, changelist) = (const struct kevent100 *)changelist;
 	SPARG(&callarg, nchanges) = nchanges;
-	SPARG(&callarg, eventlist) = eventlist;
+	SPARG(&callarg, eventlist) = (struct kevent100 *)eventlist;
 	SPARG(&callarg, nevents) = nevents;
 	SPARG(&callarg, timeout) = (const struct timespec50 *)timeout;
 
@@ -5326,9 +5326,9 @@ __strong_alias(_sys___nanosleep50,rump___sysimpl_nanosleep50);
 #endif /* RUMP_KERNEL_IS_LIBC */
 
 #ifdef RUMP_SYS_COMPAT
-int rump___sysimpl_kevent50(int, const struct kevent100 *, size_t, struct kevent100 *, size_t, const struct timespec *);
+int rump___sysimpl_kevent50(int, const struct kevent *, size_t, struct kevent *, size_t, const struct timespec *);
 int
-rump___sysimpl_kevent50(int fd, const struct kevent100 * changelist, size_t nchanges, struct kevent100 * eventlist, size_t nevents, const struct timespec * timeout)
+rump___sysimpl_kevent50(int fd, const struct kevent * changelist, size_t nchanges, struct kevent * eventlist, size_t nevents, const struct timespec * timeout)
 {
 	register_t retval[2];
 	int error = 0;
@@ -5337,9 +5337,9 @@ rump___sysimpl_kevent50(int fd, const struct kevent100 * changelist, size_t ncha
 
 	memset(&callarg, 0, sizeof(callarg));
 	SPARG(&callarg, fd) = fd;
-	SPARG(&callarg, changelist) = changelist;
+	SPARG(&callarg, changelist) = (const struct kevent100 *)changelist;
 	SPARG(&callarg, nchanges) = nchanges;
-	SPARG(&callarg, eventlist) = eventlist;
+	SPARG(&callarg, eventlist) = (struct kevent100 *)eventlist;
 	SPARG(&callarg, nevents) = nevents;
 	SPARG(&callarg, timeout) = timeout;
 
