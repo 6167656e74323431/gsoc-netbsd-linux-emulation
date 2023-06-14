@@ -35,6 +35,7 @@
 #include <sys/fcntl.h>
 #include <sys/proc.h>
 #include <sys/signal.h>
+#include <sys/vnode.h>
 
 #include <sys/syscallargs.h>
 
@@ -314,6 +315,12 @@ linux_sys_epoll_ctl(struct lwp *l, const struct linux_sys_epoll_ctl_args *uap, r
 	fp = fd_getfile(fd);
 	if (fp == NULL)
 		return EBADF;
+	if (fp->f_type == DTYPE_VNODE && (fp->f_vnode->v_type == VREG
+	    || fp->f_vnode->v_type == VDIR || fp->f_vnode->v_type == VBLK
+	    || fp->f_vnode->v_type == VLNK)) {
+		fd_putfile(fd);
+		return EPERM;
+	}
 	fd_putfile(fd);
 
 	/* Linux disallows spying on himself */
