@@ -29,6 +29,7 @@
 #include <sys/param.h>
 #include <sys/types.h>
 #include <sys/event.h>
+#include <sys/eventvar.h>
 #include <sys/errno.h>
 #include <sys/file.h>
 #include <sys/filedesc.h>
@@ -47,7 +48,12 @@
 
 #include <compat/linux/linux_syscallargs.h>
 
-#define	LINUX_MAX_EVENTS	(INT_MAX / sizeof(struct linux_epoll_event))
+#define LINUX_EPOLL_MAX_EVENTS	(INT_MAX / sizeof(struct linux_epoll_event))
+#define LINUX_EPOLL_MAX_DEPTH	5
+
+#define kext_data	ext[0]
+#define kext_epfd	ext[1]
+#define kext_fd		ext[2]
 
 #if DEBUG_LINUX
 #define DPRINTF(x) uprintf x
@@ -55,7 +61,18 @@
 #define DPRINTF(x)
 #endif
 
-static int	epoll_to_kevent(int fd,
+struct epoll_copyout_args {
+	struct linux_epoll_event *leventlist;
+	int			 count;
+	int			 error;
+};
+
+struct epoll_edge {
+	int epfd;
+	int fd;
+};
+
+static int	epoll_to_kevent(int epfd, int fd,
 		    struct linux_epoll_event *l_event, struct kevent *kevent,
 		    int *nkevents);
 static void	kevent_to_epoll(struct kevent *kevent,
@@ -77,12 +94,11 @@ static int	epoll_fd_registered(register_t *retval, int epfd,
 		    int fd);
 static int	epoll_delete_all_events(register_t *retval, int epfd,
 		    int fd);
-
-struct epoll_copyout_args {
-	struct linux_epoll_event *leventlist;
-	int			 count;
-	int			 error;
-};
+static int	epoll_recover_watch_tree(struct epoll_edge *edges, int nedges,
+		    int nfds);
+static int	epoll_dfs(struct epoll_edge *edges, int nedges, bool *seen,
+		    int nseen, int currfd, int depth);
+static int	epoll_check_loop_and_depth(struct lwp *l, int epfd, int fd);
 
 /*
  * epoll_create(2).  Just create a kqueue instance.
@@ -129,7 +145,7 @@ linux_sys_epoll_create1(struct lwp *l, const struct linux_sys_epoll_create1_args
  * Structure converting function from epoll to kevent.
  */
 static int
-epoll_to_kevent(int fd, struct linux_epoll_event *l_event,
+epoll_to_kevent(int epfd, int fd, struct linux_epoll_event *l_event,
     struct kevent *kevent, int *nkevents)
 {
 	uint32_t levents = l_event->events;
@@ -148,13 +164,17 @@ epoll_to_kevent(int fd, struct linux_epoll_event *l_event,
 	/* flags related to what event is registered */
 	if ((levents & LINUX_EPOLL_EVRD) != 0) {
 		EV_SET(kevent, fd, EVFILT_READ, kev_flags, 0, 0, 0);
-		kevent->ext[0] = l_event->data;
+		kevent->kext_data = l_event->data;
+		kevent->kext_epfd = epfd;
+		kevent->kext_fd = fd;
 		++kevent;
 		++(*nkevents);
 	}
 	if ((levents & LINUX_EPOLL_EVWR) != 0) {
 		EV_SET(kevent, fd, EVFILT_WRITE, kev_flags, 0, 0, 0);
-		kevent->ext[0] = l_event->data;
+		kevent->kext_data = l_event->data;
+		kevent->kext_epfd = epfd;
+		kevent->kext_fd = fd;
 		++kevent;
 		++(*nkevents);
 	}
@@ -180,7 +200,7 @@ static void
 kevent_to_epoll(struct kevent *kevent, struct linux_epoll_event *l_event)
 {
 
-	l_event->data = kevent->ext[0];
+	l_event->data = kevent->kext_data;
 
 	if ((kevent->flags & EV_ERROR) != 0) {
 		l_event->events = LINUX_EPOLLERR;
@@ -219,7 +239,7 @@ epoll_kev_put_events(void *ctx, struct kevent *events,
 	int error, i;
 	size_t levent_size = sizeof(*eep) * n;
 
-	KASSERT(n >= 0 && n < LINUX_MAX_EVENTS);
+	KASSERT(n >= 0 && n < LINUX_EPOLL_MAX_EVENTS);
 
 	args = (struct epoll_copyout_args *)ctx;
 	eep = kmem_alloc(levent_size, KM_SLEEP);
@@ -248,7 +268,7 @@ static int
 epoll_kev_fetch_changes(void *ctx, const struct kevent *changelist,
     struct kevent *changes, size_t index, int n)
 {
-	KASSERT(n >= 0 && n < LINUX_MAX_EVENTS);
+	KASSERT(n >= 0 && n < LINUX_EPOLL_MAX_EVENTS);
 
 	memcpy(changes, changelist + index, n * sizeof(*changes));
 
@@ -329,7 +349,7 @@ linux_sys_epoll_ctl(struct lwp *l, const struct linux_sys_epoll_ctl_args *uap, r
 	}
 
 	if (op != LINUX_EPOLL_CTL_DEL) {
-		error = epoll_to_kevent(fd, &le, kev, &nchanges);
+		error = epoll_to_kevent(epfd, fd, &le, kev, &nchanges);
 		if (error != 0)
 			return error;
 	}
@@ -342,9 +362,11 @@ linux_sys_epoll_ctl(struct lwp *l, const struct linux_sys_epoll_ctl_args *uap, r
 		break;
 
 	case LINUX_EPOLL_CTL_ADD:
-		if (epoll_fd_registered(retval, epfd, fd)) {
+		if (epoll_fd_registered(retval, epfd, fd))
 			return EEXIST;
-		}
+		error = epoll_check_loop_and_depth(l, epfd, fd);
+		if (error != 0)
+			return error;
 		break;
 
 	case LINUX_EPOLL_CTL_DEL:
@@ -387,7 +409,7 @@ epoll_wait_ts(struct lwp *l, register_t *retval, int epfd,
 	linux_sigset_t lss;
 	int error;
 
-	if (maxevents <= 0 || maxevents > LINUX_MAX_EVENTS)
+	if (maxevents <= 0 || maxevents > LINUX_EPOLL_MAX_EVENTS)
 		return EINVAL;
 
 	/* Need to validate epfd separately from kevent1 to match
@@ -587,4 +609,128 @@ epoll_delete_all_events(register_t *retval, int epfd, int fd)
 
 	/* return 0 if at least one result positive */
 	return error1 == 0 ? 0 : error2;
+}
+
+/*
+ * Interate through all the knotes and recover a directed graph on
+ * which kqueues are watching each other.
+ *
+ * If edges is NULL, the number of edges is still counted but no graph
+ * is assembled.
+ */
+static int
+epoll_recover_watch_tree(struct epoll_edge *edges, int nedges, int nfds) {
+	file_t *currfp, *targetfp;
+	struct knote *kn, *tmpkn;
+	int i, nedges_so_far = 0;
+
+	for (i = 0; (i < nfds && edges == NULL) || (i < nfds && nedges_so_far < nedges); i++) {
+		currfp = fd_getfile(i);
+		if (currfp == NULL)
+			continue;
+		if (currfp->f_type != DTYPE_KQUEUE)
+			goto continue_count_outer;
+
+		SLIST_FOREACH_SAFE(kn, &currfp->f_kqueue->kq_sel.sel_klist,
+		    kn_selnext, tmpkn) {
+			targetfp = fd_getfile(kn->kn_kevent.kext_epfd);
+			if (targetfp == NULL)
+				continue;
+			if (targetfp->f_type == DTYPE_KQUEUE) {
+				if (edges != NULL) {
+					edges[nedges_so_far].epfd = kn->kn_kevent.kext_epfd;
+					edges[nedges_so_far].fd = kn->kn_kevent.kext_fd;
+				}
+				nedges_so_far++;
+			}
+
+			fd_putfile(kn->kn_kevent.kext_epfd);
+		}
+
+        continue_count_outer:
+		fd_putfile(i);
+	}
+
+	return nedges_so_far;
+}
+
+/*
+ * Run dfs on the graph described by edges, checking for loops and a
+ * depth greater than LINUX_EPOLL_MAX_DEPTH.
+ */
+static int
+epoll_dfs(struct epoll_edge *edges, int nedges, bool *seen, int nseen,
+    int currfd, int depth) {
+	int error, i;
+
+	KASSERT(edges != NULL);
+	KASSERT(nedges > 0);
+	KASSERT(currfd < nseen);
+	KASSERT(0 <= depth && depth <= LINUX_EPOLL_MAX_DEPTH + 1);
+
+	if (seen[currfd])
+		return ELOOP;
+	else
+		seen[currfd] = 1;
+
+	depth++;
+	if (depth > LINUX_EPOLL_MAX_DEPTH)
+		return EINVAL;
+
+	for (i = 0; i < nedges; i++) {
+		if (edges[i].epfd != currfd)
+			continue;
+
+		error = epoll_dfs(edges, nedges, seen, nseen,
+		    edges[i].fd, depth);
+		if (error != 0)
+			return error;
+	}
+
+	return 0;
+}
+
+/*
+ * Check if adding fd to epfd would violate the maximum depth or
+ * create a loop.
+ */
+static int
+epoll_check_loop_and_depth(struct lwp *l, int epfd, int fd)
+{
+	int error, nedges, nfds;
+	file_t *fp;
+	struct epoll_edge *edges;
+	bool *seen;
+
+	/* If the target isn't another kqueue, we can skip this check */
+	fp = fd_getfile(fd);
+	if (fp == NULL)
+		return 0;
+	if (fp->f_type != DTYPE_KQUEUE) {
+		fd_putfile(fd);
+		return 0;
+	}
+	fd_putfile(fd);
+
+	nfds = l->l_proc->p_fd->fd_lastfile + 1;
+
+	/* We call epoll_recover_watch_tree twice, once to find the
+	   number of edges, and once to actually fill them in.  We add one
+	   because we want to include the edge epfd->fd. */
+        nedges = 1 + epoll_recover_watch_tree(NULL, 0, nfds);
+
+	edges = kmem_zalloc(nedges * sizeof(*edges), KM_SLEEP);
+	seen = kmem_zalloc(nfds * sizeof(*seen), KM_SLEEP);
+
+	epoll_recover_watch_tree(edges + 1, nedges - 1, nfds);
+
+	edges[0].epfd = epfd;
+	edges[0].fd = fd;
+
+	error = epoll_dfs(edges, nedges, seen, nfds, epfd, 0);
+
+	kmem_free(seen, nfds * sizeof(*seen));
+	kmem_free(edges, nedges * sizeof(*edges));
+
+	return error;
 }
