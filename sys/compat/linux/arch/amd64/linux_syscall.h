@@ -708,6 +708,12 @@
 /* syscall: "getrandom" ret: "ssize_t" args: "void *" "size_t" "unsigned int" */
 #define	LINUX_SYS_getrandom	318
 
+#ifdef SYSVSHM
+/* syscall: "memfd_create" ret: "int" args: "const char *" "unsigned int" */
+#define	LINUX_SYS_memfd_create	319
+
+#else
+#endif
 /* syscall: "nosys" ret: "int" args: */
 #define	LINUX_SYS_nosys	451
 

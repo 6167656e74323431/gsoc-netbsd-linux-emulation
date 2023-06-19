@@ -575,7 +575,12 @@
 317	UNIMPL		seccomp
 318     NOARGS		{ ssize_t|sys||getrandom(void *buf, size_t buflen, \
 			    unsigned int flags); }
+#ifdef SYSVSHM
+319	STD		{ int|linux_sys||memfd_create(const char *name, \
+			    unsigned int flags); }
+#else
 319	UNIMPL		memfd_create
+#endif
 320	UNIMPL		kexec_file_load
 321	UNIMPL		bpf
 322	UNIMPL		execveat

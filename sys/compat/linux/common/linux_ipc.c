@@ -662,4 +662,14 @@ linux_sys_shmctl(struct lwp *l, const struct linux_sys_shmctl_args *uap, registe
 		return EINVAL;
 	}
 }
+
+/*
+ * memfd_create(2).  TODO
+ */
+int
+linux_sys_memfd_create(struct lwp *l, const struct linux_sys_memfd_create_args *uap,
+    register_t *retval)
+{
+	return EINVAL;
+}
 #endif /* SYSVSHM */
