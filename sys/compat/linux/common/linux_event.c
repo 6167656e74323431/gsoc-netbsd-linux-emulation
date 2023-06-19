@@ -335,11 +335,18 @@ linux_sys_epoll_ctl(struct lwp *l, const struct linux_sys_epoll_ctl_args *uap, r
 	fp = fd_getfile(fd);
 	if (fp == NULL)
 		return EBADF;
-	if (fp->f_type == DTYPE_VNODE && (fp->f_vnode->v_type == VREG
-	    || fp->f_vnode->v_type == VDIR || fp->f_vnode->v_type == VBLK
-	    || fp->f_vnode->v_type == VLNK)) {
-		fd_putfile(fd);
-		return EPERM;
+	if (fp->f_type == DTYPE_VNODE) {
+		switch (fp->f_vnode->v_type) {
+		case VREG:
+		case VDIR:
+		case VBLK:
+		case VLNK:
+			fd_putfile(fd);
+			return EPERM;
+
+		default:
+			break;
+		}
 	}
 	fd_putfile(fd);
 
