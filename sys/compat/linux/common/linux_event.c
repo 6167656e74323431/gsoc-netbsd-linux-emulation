@@ -631,7 +631,7 @@ epoll_recover_watch_tree(struct epoll_edge *edges, int nedges, int nfds) {
 	struct knote *kn, *tmpkn;
 	int i, nedges_so_far = 0;
 
-	for (i = 0; (i < nfds && edges == NULL) || (i < nfds && nedges_so_far < nedges); i++) {
+	for (i = 0; i < nfds && (edges == NULL || nedges_so_far < nedges); i++) {
 		currfp = fd_getfile(i);
 		if (currfp == NULL)
 			continue;
