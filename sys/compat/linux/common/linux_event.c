@@ -97,10 +97,11 @@ static int	epoll_fd_registered(register_t *retval, int epfd,
 		    int fd);
 static int	epoll_delete_all_events(register_t *retval, int epfd,
 		    int fd);
-static int	epoll_recover_watch_tree(struct epoll_edge *edges, int nedges,
-		    int nfds);
-static int	epoll_dfs(struct epoll_edge *edges, int nedges,
-		    struct epoll_seen *seen, int nseen, int currfd, int depth);
+static int	epoll_recover_watch_tree(struct epoll_edge *edges,
+		    size_t nedges, size_t nfds);
+static int	epoll_dfs(struct epoll_edge *edges, size_t nedges,
+		    struct epoll_seen *seen, size_t nseen, int currfd,
+		    int depth);
 static int	epoll_check_loop_and_depth(struct lwp *l, int epfd, int fd);
 
 /*
@@ -629,10 +630,10 @@ epoll_delete_all_events(register_t *retval, int epfd, int fd)
  * is assembled.
  */
 static int
-epoll_recover_watch_tree(struct epoll_edge *edges, int nedges, int nfds) {
+epoll_recover_watch_tree(struct epoll_edge *edges, size_t nedges, size_t nfds) {
 	file_t *currfp, *targetfp;
 	struct knote *kn, *tmpkn;
-	int i, nedges_so_far = 0;
+	size_t i, nedges_so_far = 0;
 
 	for (i = 0; i < nfds && (edges == NULL || nedges_so_far < nedges); i++) {
 		currfp = fd_getfile(i);
@@ -669,9 +670,10 @@ epoll_recover_watch_tree(struct epoll_edge *edges, int nedges, int nfds) {
  * depth greater than LINUX_EPOLL_MAX_DEPTH.
  */
 static int
-epoll_dfs(struct epoll_edge *edges, int nedges, struct epoll_seen *seen,
-    int nseen, int currfd, int depth) {
-	int error, i;
+epoll_dfs(struct epoll_edge *edges, size_t nedges, struct epoll_seen *seen,
+    size_t nseen, int currfd, int depth) {
+	int error;
+	size_t i;
 
 	KASSERT(edges != NULL);
 	KASSERT(seen != NULL);
@@ -708,11 +710,11 @@ epoll_dfs(struct epoll_edge *edges, int nedges, struct epoll_seen *seen,
 static int
 epoll_check_loop_and_depth(struct lwp *l, int epfd, int fd)
 {
-	int error, nedges, nfds;
+	int error;
 	file_t *fp;
 	struct epoll_edge *edges;
 	struct epoll_seen *seen;
-	size_t seen_size;
+	size_t nedges, nfds, seen_size;
 
 	/* If the target isn't another kqueue, we can skip this check */
 	fp = fd_getfile(fd);
