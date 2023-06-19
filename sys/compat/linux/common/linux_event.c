@@ -314,7 +314,8 @@ linux_sys_epoll_ctl(struct lwp *l, const struct linux_sys_epoll_ctl_args *uap, r
 		.keo_put_events = NULL,
 	};
 	file_t *epfp, *fp;
-	int error, nchanges = 0;
+	int error = 0;
+	int nchanges = 0;
 	const int epfd = SCARG(uap, epfd);
 	const int op = SCARG(uap, op);
 	const int fd = SCARG(uap, fd);
@@ -330,11 +331,11 @@ linux_sys_epoll_ctl(struct lwp *l, const struct linux_sys_epoll_ctl_args *uap, r
 	epfp = fd_getfile(epfd);
 	if (epfp == NULL)
 		return EBADF;
-	if (epfp->f_type != DTYPE_KQUEUE) {
-		fd_putfile(epfd);
-		return EINVAL;
-	}
+	if (epfp->f_type != DTYPE_KQUEUE)
+		error = EINVAL;
 	fd_putfile(epfd);
+	if (error != 0)
+		return error;
 
 	fp = fd_getfile(fd);
 	if (fp == NULL)
@@ -345,14 +346,16 @@ linux_sys_epoll_ctl(struct lwp *l, const struct linux_sys_epoll_ctl_args *uap, r
 		case VDIR:
 		case VBLK:
 		case VLNK:
-			fd_putfile(fd);
-			return EPERM;
+			error = EPERM;
+			break;
 
 		default:
 			break;
 		}
 	}
 	fd_putfile(fd);
+	if (error != 0)
+		return error;
 
 	/* Linux disallows spying on himself */
 	if (epfd == fd) {
@@ -418,7 +421,7 @@ epoll_wait_ts(struct lwp *l, register_t *retval, int epfd,
 	file_t *epfp;
 	sigset_t nss, oss;
 	linux_sigset_t lss;
-	int error;
+	int error = 0;
 
 	if (maxevents <= 0 || maxevents > LINUX_EPOLL_MAX_EVENTS)
 		return EINVAL;
@@ -428,11 +431,11 @@ epoll_wait_ts(struct lwp *l, register_t *retval, int epfd,
 	epfp = fd_getfile(epfd);
 	if (epfp == NULL)
 		return EBADF;
-	if (epfp->f_type != DTYPE_KQUEUE) {
-		fd_putfile(epfd);
-		return EINVAL;
-	}
+	if (epfp->f_type != DTYPE_KQUEUE)
+		error = EINVAL;
 	fd_putfile(epfd);
+	if (error != 0)
+		return error;
 
 	if (lssp != NULL) {
 		error = copyin(lssp, &lss, sizeof(lss));
@@ -715,16 +718,16 @@ epoll_check_loop_and_depth(struct lwp *l, int epfd, int fd)
 	struct epoll_edge *edges;
 	struct epoll_seen *seen;
 	size_t nedges, nfds, seen_size;
+	bool fdirrelevant;
 
 	/* If the target isn't another kqueue, we can skip this check */
 	fp = fd_getfile(fd);
 	if (fp == NULL)
 		return 0;
-	if (fp->f_type != DTYPE_KQUEUE) {
-		fd_putfile(fd);
-		return 0;
-	}
+	fdirrelevant = fp->f_type != DTYPE_KQUEUE;
 	fd_putfile(fd);
+	if (fdirrelevant)
+		return 0;
 
 	nfds = l->l_proc->p_fd->fd_lastfile + 1;
 
