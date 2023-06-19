@@ -28,6 +28,7 @@
 
 #include <sys/param.h>
 #include <sys/types.h>
+#include <sys/bitops.h>
 #include <sys/event.h>
 #include <sys/eventvar.h>
 #include <sys/errno.h>
@@ -72,6 +73,8 @@ struct epoll_edge {
 	int fd;
 };
 
+__BITMAP_TYPE(epoll_seen, char, 1);
+
 static int	epoll_to_kevent(int epfd, int fd,
 		    struct linux_epoll_event *l_event, struct kevent *kevent,
 		    int *nkevents);
@@ -96,8 +99,8 @@ static int	epoll_delete_all_events(register_t *retval, int epfd,
 		    int fd);
 static int	epoll_recover_watch_tree(struct epoll_edge *edges, int nedges,
 		    int nfds);
-static int	epoll_dfs(struct epoll_edge *edges, int nedges, bool *seen,
-		    int nseen, int currfd, int depth);
+static int	epoll_dfs(struct epoll_edge *edges, int nedges,
+		    struct epoll_seen *seen, int nseen, int currfd, int depth);
 static int	epoll_check_loop_and_depth(struct lwp *l, int epfd, int fd);
 
 /*
@@ -666,19 +669,20 @@ epoll_recover_watch_tree(struct epoll_edge *edges, int nedges, int nfds) {
  * depth greater than LINUX_EPOLL_MAX_DEPTH.
  */
 static int
-epoll_dfs(struct epoll_edge *edges, int nedges, bool *seen, int nseen,
-    int currfd, int depth) {
+epoll_dfs(struct epoll_edge *edges, int nedges, struct epoll_seen *seen,
+    int nseen, int currfd, int depth) {
 	int error, i;
 
 	KASSERT(edges != NULL);
+	KASSERT(seen != NULL);
 	KASSERT(nedges > 0);
 	KASSERT(currfd < nseen);
 	KASSERT(0 <= depth && depth <= LINUX_EPOLL_MAX_DEPTH + 1);
 
-	if (seen[currfd])
+	if (__BITMAP_ISSET(currfd, seen))
 		return ELOOP;
-	else
-		seen[currfd] = 1;
+
+	__BITMAP_SET(currfd, seen);
 
 	depth++;
 	if (depth > LINUX_EPOLL_MAX_DEPTH)
@@ -707,7 +711,8 @@ epoll_check_loop_and_depth(struct lwp *l, int epfd, int fd)
 	int error, nedges, nfds;
 	file_t *fp;
 	struct epoll_edge *edges;
-	bool *seen;
+	struct epoll_seen *seen;
+	size_t seen_size;
 
 	/* If the target isn't another kqueue, we can skip this check */
 	fp = fd_getfile(fd);
@@ -727,16 +732,18 @@ epoll_check_loop_and_depth(struct lwp *l, int epfd, int fd)
         nedges = 1 + epoll_recover_watch_tree(NULL, 0, nfds);
 
 	edges = kmem_zalloc(nedges * sizeof(*edges), KM_SLEEP);
-	seen = kmem_zalloc(nfds * sizeof(*seen), KM_SLEEP);
 
 	epoll_recover_watch_tree(edges + 1, nedges - 1, nfds);
 
 	edges[0].epfd = epfd;
 	edges[0].fd = fd;
 
+	seen_size = __BITMAP_SIZE(char, nfds);
+	seen = kmem_zalloc(seen_size, KM_SLEEP);
+
 	error = epoll_dfs(edges, nedges, seen, nfds, epfd, 0);
 
-	kmem_free(seen, nfds * sizeof(*seen));
+	kmem_free(seen, seen_size);
 	kmem_free(edges, nedges * sizeof(*edges));
 
 	return error;
