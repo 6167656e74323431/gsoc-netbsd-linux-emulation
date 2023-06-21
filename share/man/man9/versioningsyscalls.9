@@ -8,8 +8,45 @@
 .Nm versioningsyscalls
 .Nd guide on versioning syscalls
 .Sh DESCRIPTION
-NetBSD has the ability to change the ABI (version) a syscall without changing
-the name of the syscall.
+.Nx
+has the ability to change the ABI of a syscall whilst retaining backwards
+compatibility with existing code.
+This means that existing code keeps working the same way as before, and
+new code can use new features and/or functionality.
+In the past this has allowed
+.Ft dev_t
+to move from 16 bits to 32 bits,
+.Ft ino_t
+and
+.Ft time_t
+to move from 16 bits to 32 bits and
+adding fields to
+.Ft struct kevent
+without disturbing existing binaries.
+To achieve this both kernel and userland changes are required.
+.Pp
+In the kernel, a new syscall is added with a new ABI, and the old syscall
+is retained and moved to a new location that holds the compatibility syscalls
+.Pa ( src/sys/compat ) .
+Kernels can be compiled with or without backwards compatibility syscalls.
+See the
+.Dv COMPAT_XX
+options in
+.Xr options 4 .
+.Pp
+In userland, the original syscall stub is moved into
+.Pa src/lib/libc/compat
+retaining the same symbol name and ABI.
+The new stub is added to libc, and in the header file the syscall symbol is
+made to point to the new name with the new ABI.
+.Pp
+This is done via symbol renaming instead of ELF versioned symbols for
+historical reasons. 
+.Nx
+has retained binary compatibility with most syscalls since
+.Nx 0.9 
+with the exception of Scheduler Activation syscalls which are not being
+emulated because of the cost and safety of doing so.
 .Pp
 To avoid confusion, the following words are used to disambiguate which version
 of the system call is being described.
@@ -23,7 +60,9 @@ The version of the syscall currently in use.
 The version of the syscall that will become standard in the next release.
 .El
 .Pp
-Additionally, XYZ always represents the last NetBSD release where the current
+Additionally, 
+.Em XYZ
+always represents the last NetBSD release where the current
 version of the system call is the default, multiplied by ten.
 .Sh VERSIONING THE SYSCALL
 This section describes what needs to be modified to add the new version of the
@@ -64,6 +103,12 @@ Next, modify the current version of the syscall, and replace the type field with
 .Pp
 Finally, if applicable, replace the types of the current and old versions of the
 syscall with the compat type.
+.Bd -literal
+- 123 STD		    { int|sys||my_syscall(struct my_struct *ms); }
++ 123 COMPAT_XYZ compat_XYZ { int|sys||my_syscall(struct my_structXYZ *ms); }
+\&.\&.\&.
++ 456 STD     		    { int|sys|XYZ|my_syscall(struct my_struct *ms); }
+.Ed
 .Ss Modifying Makefile.rump
 If the current syscall is rump, make sure
 .Pa sys/rump/Makefile.rump
