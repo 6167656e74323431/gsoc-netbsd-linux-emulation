@@ -1,7 +1,7 @@
 .\"	$NetBSD$
 .\"
 .\" TODO Copyright notice
-.Dd June 19, 2023
+.Dd June 23, 2023
 .Dt versioningsyscalls 9
 .Os
 .Sh NAME
@@ -62,32 +62,39 @@ The version of the syscall that will become standard in the next release.
 .Pp
 Additionally, 
 .Em XYZ
-always represents the last NetBSD release where the current
+always represents the last
+.Nx
+release where the current
 version of the system call is the default, multiplied by ten.
 .Sh VERSIONING THE SYSCALL
 This section describes what needs to be modified to add the new version of the
-syscall.
+syscall.  It assumes the current version of the syscall is
+.Fn my_syscall struct\ my_struct\ *ms
+and that
+.Li my_struct
+will be versioned.  If not versioning a struct, passages that mention
+.Li my_struct
+can be ignored.
 .Ss Versioning structs
-If a field in the struct
+To version
+.Li struct my_struct ,
+first make a copy of
 .Li my_struct
-needs to be change, a copy of
-.Li my_struct
-first needs to be renamed to
+renamed to
 .Li my_structXYZ
-and placed in an equivalent header in
+in an equivalent header in
 .Pa sys/compat/sys .
-The original struct can then be modified as desired.
+After that, you can freely modify
+.Li my_struct
+as desired.
 .Ss Versioning the entry point
-If the original name of the syscall was
-.Li my_syscall
-then the new name will be
-.Li __my_syscallXYZ ,
-so the new entry point is
+The stub for the next version of the syscall will be
+.Fn __my_syscallXYZ ,
+and will have entry point
 .Fn sys___my_syscallXYZ .
 .Ss Modifying syscalls.conf
-Make sure
 .Pa sys/kern/syscalls.conf
-contains
+may need to be modified to contain
 .Li compat_XYZ
 in the
 .Li compatopts
@@ -95,32 +102,38 @@ field.
 .Ss Modifying syscalls.master
 First, add the next syscall to
 .Pa sys/kern/syscalls.master
-and make the name the same as name as the current system call, but set the
-optional compat field of the declaration to XYZ.
+keeping
+.Li my_syscall
+as the name, and set the (optional) compat field of the declaration to XYZ.
 .Pp
-Next, modify the current version of the syscall, and replace the type field with
+Next, modify the current version of the syscall, and replace the type
+field (usually just STD) with
 .Li COMPAT_XYZ MODULAR compat_XYZ .
 .Pp
 Finally, if applicable, replace the types of the current and old versions of the
 syscall with the compat type.
+.Pp
+Overall, the final diff should look like
 .Bd -literal
-- 123 STD		    { int|sys||my_syscall(struct my_struct *ms); }
-+ 123 COMPAT_XYZ compat_XYZ { int|sys||my_syscall(struct my_structXYZ *ms); }
+- 123 STD                           { int|sys||my_syscall(struct my_struct *ms); }
++ 123 COMPAT_XYZ MODULAR compat_XYZ { int|sys||my_syscall(struct my_structXYZ *ms); }
 \&.\&.\&.
-+ 456 STD     		    { int|sys|XYZ|my_syscall(struct my_struct *ms); }
++ 456 STD               	    { int|sys|XYZ|my_syscall(struct my_struct *ms); }
 .Ed
 .Ss Modifying Makefile.rump
-If the current syscall is rump, make sure
+If the current syscall is rump,
 .Pa sys/rump/Makefile.rump
-contains
+must contain
 .Li XYZ
 in the
 .Li RUMP_NBCOMPAT
 variable.
 .Ss Regenerating the system calls
-If versioning structs, then you will need to edit
+If versioning structs, then modify
 .Pa sys/kern/makesyscalls.sh
-to add the compat type to
+by adding and entry for
+.Li struct my_structXYZ
+type to
 .Li uncompattypes .
 .Pp
 Then regenerate the syscall tables in the usual way, first by running
@@ -132,58 +145,88 @@ and then running
 passing it the path to the result of the build you just did as its first
 argument.
 .Sh KERNEL COMPATIBILITY
-To maintain backwards compatibility, you need to write a version of the current
-syscall in a compat kernel module.  This section describes how that is done.
-For the purposes of this section, we assume the current syscall has entry point
+This section covers maintaining compatibility at the kernel level, by
+adding an entry point for the current syscall in an appropriate compat
+module.  For the purposes of this section, we assume the current
+syscall has entry point
 .Fn sys_my_syscall
 and lives inside
-.Pa sys/kern/my_syscall.c .
+.Pa sys/kern/my_file.c .
 .Ss Creating the compat current syscall
 The compat version of the current syscall has entry point
-.Fn compat_XYZ_sys_my_syscall .
-By convention, the implementation of this syscall should be located in
-.Pa sys/compat/common/my_syscall_XYZ.c .
+.Fn compat_XYZ_sys_my_syscall ,
+and should be implemented in
+.Pa sys/compat/common/my_file_XYZ.c
+with the same semantics as the current syscall.  Often this involves
+translating the arguments to the next syscall, and then calling that
+syscall's entry point.
 .Ss Adding it to the compat module
-.Pa sys/compat/common/my_syscall_XYZ.c 
-should contain an array of
+.Pa sys/compat/common/my_file_XYZ.c
+must contain an array of
 .Ft struct syscall_package
-that declares the mapping between syscall number and entry point (TODO should
-probably be more specific).
+that declares the mapping between syscall number and entry point,
+terminating in a zero element (see sample diff below).
 .Pp
 Additionally,
-.Pa sys/compat/common/my_syscall_XYZ.c 
-should contain two functions,
-.Fn my_syscall_XYZ_init
+.Pa sys/compat/common/my_file_XYZ.c
+must contain two functions,
+.Fn my_file_XYZ_init
 and
-.Fn my_syscall_XYZ_fini
-that can be used to initialize/clean up anything related to this syscall.  At
-the minimum they must make calls to
+.Fn my_file_XYZ_fini
+that are used to initialize/clean up anything related to this syscall.
+At the minimum they must make calls to
 .Fn syscall_establish
 and
 .Fn syscall_disestablish
-respectively, adding and removing the syscalls.  The stubs for these functions
-should be located in
+respectively, adding and removing the syscalls.  The stubs for these
+functions should be located in
 .Pa sys/compat/common/compat_mod.h .
+.Pp
+Overall,
+.Pa sys/compat/common/my_file_XYZ.c
+must at the minimum include
+.Bd -literal
++ static const struct syscall_package my_file_XYZ_syscalls[] = {
++ 	{ SYS_compat_XYZ_my_syscall, 0, (sy_call_t *)compat_XYZ_sys_my_syscall },
++ 	{ 0, 0, NULL },
++ };
++
++ int
++ compat_XYZ_my_syscall(...)
++ { /* Compat implementation goes here. */ }
++
++ int
++ my_file_XYZ_init(void)
++ { return syscall_establish(NULL, my_file_XYZ_syscalls); }
++
++ int
++ my_file_XYZ_fini(void)
++ { return syscall_disestablish(NULL, my_file_XYZ_syscalls); }
+.Ed
 .Pp
 Finally,
 .Pa sys/compat/common/compat_XYZ_mod.c
-should be modified to have its
+needs to be be modified to have its
 .Fn compat_XYZ_init
 and
 .Fn compat_XYZ_fini
-functions call the one made in the previous paragraph.
+functions call
+.Fn my_file_XYZ_init
+and
+.Fn my_file_XYZ_fini .
 .Ss Modifying old compat syscalls
-If the current syscall has already been versioned, you may need to modify the
-old compat syscalls in
+If the current syscall has already been versioned, you might need to
+modify the old compat syscalls in
 .Pa sys/compat/common
 to either use the next syscall or the current compat syscall.  Note that compat
 code can be made to depend on compat code for more recent releases.
 .Sh USERLAND COMPATIBILITY
 With the exception of the libraries described below, making the rest of userland
-work will just involve recompiling, and perhaps changing a constant.
+work will just involve recompiling, and perhaps changing a constant or a
+.Li #define .
 .Ss libc
 A userland version of any old and current versions of the syscall should be
-implemented in terms of the next syscall (TODO should say why) in
+implemented in terms of the next syscall in
 .Pa lib/libc/compat/sys
 and should contain an appropriate call to
 .Fn __warn_references
