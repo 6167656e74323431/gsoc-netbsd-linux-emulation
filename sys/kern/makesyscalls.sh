@@ -419,6 +419,7 @@ NR == 1 {
 	uncompattypes["struct timeval50"] = "struct timeval";
 	uncompattypes["struct timespec50"] = "struct timespec";
 	uncompattypes["struct stat30"] = "struct stat";
+	uncompattypes["struct kevent100"] = "struct kevent";
 
 	next
 }

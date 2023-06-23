@@ -1,4 +1,4 @@
-/* $NetBSD: syscall.h,v 1.321 2021/11/01 05:26:27 thorpej Exp $ */
+/* $NetBSD$ */
 
 /*
  * System call numbers.
@@ -954,7 +954,7 @@
 /* syscall: "kqueue" ret: "int" args: */
 #define	SYS_kqueue	344
 
-/* syscall: "compat_50_kevent" ret: "int" args: "int" "const struct kevent *" "size_t" "struct kevent *" "size_t" "const struct timespec50 *" */
+/* syscall: "compat_50_kevent" ret: "int" args: "int" "const struct kevent100 *" "size_t" "struct kevent100 *" "size_t" "const struct timespec50 *" */
 #define	SYS_compat_50_kevent	345
 
 /* syscall: "_sched_setparam" ret: "int" args: "pid_t" "lwpid_t" "int" "const struct sched_param *" */
@@ -1207,8 +1207,8 @@
 /* syscall: "compat_60__lwp_park" ret: "int" args: "const struct timespec *" "lwpid_t" "const void *" "const void *" */
 #define	SYS_compat_60__lwp_park	434
 
-/* syscall: "__kevent50" ret: "int" args: "int" "const struct kevent *" "size_t" "struct kevent *" "size_t" "const struct timespec *" */
-#define	SYS___kevent50	435
+/* syscall: "compat_100___kevent50" ret: "int" args: "int" "const struct kevent100 *" "size_t" "struct kevent100 *" "size_t" "const struct timespec *" */
+#define	SYS_compat_100___kevent50	435
 
 /* syscall: "__pselect50" ret: "int" args: "int" "fd_set *" "fd_set *" "fd_set *" "const struct timespec *" "const sigset_t *" */
 #define	SYS___pselect50	436
@@ -1404,6 +1404,9 @@
 /* syscall: "lpathconf" ret: "long" args: "const char *" "int" */
 #define	SYS_lpathconf	499
 
-#define	SYS_MAXSYSCALL	500
+/* syscall: "__kevent100" ret: "int" args: "int" "const struct kevent *" "size_t" "struct kevent *" "size_t" "const struct timespec *" */
+#define	SYS___kevent100	500
+
+#define	SYS_MAXSYSCALL	501
 #define	SYS_NSYSENT	512
 #endif /* _SYS_SYSCALL_H_ */

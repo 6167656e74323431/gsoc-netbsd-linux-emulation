@@ -926,8 +926,10 @@ rumpclient_init(void)
 #ifdef __NetBSD__
 #if !__NetBSD_Prereq__(5,99,7)
 	FINDSYM(kevent)
-#else
+#elif !__NetBSD_Prereq__(10,99,4)
 	FINDSYM2(kevent,_sys___kevent50)
+#else
+	FINDSYM2(kevent,_sys___kevent100)
 #endif
 #else
 	FINDSYM(kevent)

@@ -1,4 +1,4 @@
-/* $NetBSD: syscalls_autoload.c,v 1.43 2021/11/01 05:26:27 thorpej Exp $ */
+/* $NetBSD$ */
 
 /*
  * System call autoload table.
@@ -8,7 +8,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: syscalls_autoload.c,v 1.43 2021/11/01 05:26:27 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD$");
 
 #ifdef _KERNEL_OPT
 #include "opt_modular.h"
@@ -200,6 +200,7 @@ static struct sc_autoload netbsd_syscalls_autoload[] = {
 	    { SYS___mq_timedsend50, "mqueue" },
 	    { SYS___mq_timedreceive50, "mqueue" },
 	    { SYS_compat_60__lwp_park, "compat_60" },
+	    { SYS_compat_100___kevent50, "compat_100" },
 	    { SYS___aio_suspend50, "aio" },
 	    { SYS_____semctl50, "sysv_ipc" },
 	    { SYS___shmctl50, "sysv_ipc" },

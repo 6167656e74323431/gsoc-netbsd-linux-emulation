@@ -10,6 +10,7 @@ define	compat_linux		: compat, compat_ossaudio, sysv_ipc
 file	compat/linux/common/linux_blkio.c	compat_linux
 file	compat/linux/common/linux_cdrom.c	compat_linux
 file	compat/linux/common/linux_errno.c	compat_linux
+file	compat/linux/common/linux_event.c	compat_linux
 file	compat/linux/common/linux_exec.c	compat_linux
 file	compat/linux/common/linux_exec_elf32.c	compat_linux & exec_elf32
 file	compat/linux/common/linux_exec_elf64.c	compat_linux & exec_elf64
