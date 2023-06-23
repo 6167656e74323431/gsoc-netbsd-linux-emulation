@@ -24,6 +24,7 @@ DEPENDS_suse-15.5.alsa?=	suse_alsa${_SUSE_VERSION_REQD}:../../emulators/suse15_a
 DEPENDS_suse-15.5.base?=	suse_base${_SUSE_VERSION_REQD}:../../emulators/suse15_base
 DEPENDS_suse-15.5.binutils?=	suse_binutils${_SUSE_VERSION_REQD}:../../emulators/suse15_binutils
 DEPENDS_suse-15.5.dbus?=	suse_libdbus${_SUSE_VERSION_REQD}:../../emulators/suse15_libdbus
+DEPENDS_suse-15.5.devel?=	suse_devel${_SUSE_VERSION_REQD}:../../emulators/suse15_devel
 DEPENDS_suse-15.5.drm?=		suse_libdrm${_SUSE_VERSION_REQD}:../../emulators/suse15_libdrm
 DEPENDS_suse-15.5.expat?=	suse_expat${_SUSE_VERSION_REQD}:../../emulators/suse15_expat
 DEPENDS_suse-15.5.fontconfig?=	suse_fontconfig${_SUSE_VERSION_REQD}:../../emulators/suse15_fontconfig
