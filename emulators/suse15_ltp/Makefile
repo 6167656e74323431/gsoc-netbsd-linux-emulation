@@ -19,7 +19,7 @@ USE_TOOLS+=	perl
 MAKE_PROGRAM=	${LINUX_MAKE}
 
 # Despite the fact this package uses a GNU autoconf script, we don't
-# want most of what GNU_CONFIGURE_DOES.
+# want most of what GNU_CONFIGURE does.
 HAS_CONFIGURE=	yes
 CONFIG_SHELL=	${EMULDIR}/bin/bash
 CONFIGURE_ARGS+=	--prefix=${EMULDIR}/opt/ltp
