@@ -1,4 +1,4 @@
-/* $NetBSD: init_sysent.c,v 1.339 2021/11/01 05:26:27 thorpej Exp $ */
+/* $NetBSD$ */
 
 /*
  * System call switch table.
@@ -8,7 +8,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: init_sysent.c,v 1.339 2021/11/01 05:26:27 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD$");
 
 #ifdef _KERNEL_OPT
 #include "opt_modular.h"
@@ -125,6 +125,12 @@ __KERNEL_RCSID(0, "$NetBSD: init_sysent.c,v 1.339 2021/11/01 05:26:27 thorpej Ex
 #define	compat_90(func) __CONCAT(compat_90_,func)
 #else
 #define	compat_90(func) sys_nosys
+#endif
+
+#ifdef COMPAT_100
+#define	compat_100(func) __CONCAT(compat_100_,func)
+#else
+#define	compat_100(func) sys_nosys
 #endif
 
 #define	s(type)	sizeof(type)
@@ -2112,10 +2118,10 @@ struct sysent sysent[] = {
 		.sy_call = (sy_call_t *)sys_nomodule
 	},		/* 434 = compat_60__lwp_park */
 	{
-		ns(struct sys___kevent50_args),
+		ns(struct compat_100_sys___kevent50_args),
 		.sy_flags = SYCALL_ARG_PTR,
-		.sy_call = (sy_call_t *)sys___kevent50
-	},		/* 435 = __kevent50 */
+		.sy_call = (sy_call_t *)sys_nomodule
+	},		/* 435 = compat_100___kevent50 */
 	{
 		ns(struct sys___pselect50_args),
 		.sy_flags = SYCALL_ARG_PTR,
@@ -2438,8 +2444,10 @@ struct sysent sysent[] = {
 		.sy_call = (sy_call_t *)sys_lpathconf
 	},		/* 499 = lpathconf */
 	{
-		.sy_call = sys_nosys,
-	},		/* 500 = filler */
+		ns(struct sys___kevent100_args),
+		.sy_flags = SYCALL_ARG_PTR,
+		.sy_call = (sy_call_t *)sys___kevent100
+	},		/* 500 = __kevent100 */
 	{
 		.sy_call = sys_nosys,
 	},		/* 501 = filler */
@@ -2489,7 +2497,7 @@ const uint32_t sysent_nomodbits[] = {
 	0x0200fc01,	/* syscalls 320-351 */
 	0x006000f0,	/* syscalls 352-383 */
 	0x007fe338,	/* syscalls 384-415 */
-	0x1c470040,	/* syscalls 416-447 */
+	0x1c4f0040,	/* syscalls 416-447 */
 	0x00000000,	/* syscalls 448-479 */
 	0x00000000,	/* syscalls 480-511 */
 };

@@ -109,13 +109,13 @@ linux32_sys_wait4(struct lwp *l, const struct linux32_sys_wait4_args *uap, regis
 		return EINVAL;
 
 	options = 0;
-	if (linux_options & LINUX_WAIT4_WNOHANG)
+	if (linux_options & LINUX_WNOHANG)
 		options |= WNOHANG;
-	if (linux_options & LINUX_WAIT4_WUNTRACED)
+	if (linux_options & LINUX_WUNTRACED)
 		options |= WUNTRACED;
-	if (linux_options & LINUX_WAIT4_WALL)
+	if (linux_options & LINUX_WALL)
 		options |= WALLSIG;
-	if (linux_options & LINUX_WAIT4_WCLONE)
+	if (linux_options & LINUX_WCLONE)
 		options |= WALTSIG;
 
 	pid = SCARG(uap, pid);

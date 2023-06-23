@@ -50,14 +50,14 @@ int
 compat_100_init(void)
 {
 
-	return 0;
+	return kern_event_100_init();
 }
 
 int
 compat_100_fini(void)
 {
 
-	return 0;
+	return kern_event_100_fini();
 }
 
 MODULE(MODULE_CLASS_EXEC, compat_100, NULL);

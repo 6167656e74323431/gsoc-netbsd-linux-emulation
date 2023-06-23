@@ -1,4 +1,4 @@
-/* $NetBSD: rump_syscalls.h,v 1.126 2021/11/01 05:26:28 thorpej Exp $ */
+/* $NetBSD$ */
 
 /*
  * System call protos in rump namespace.
@@ -461,7 +461,7 @@
 #endif
 
 #ifndef RUMP_SYS_RENAME_KEVENT
-#define RUMP_SYS_RENAME_KEVENT rump___sysimpl_kevent50
+#define RUMP_SYS_RENAME_KEVENT rump___sysimpl_kevent100
 #endif
 
 #ifndef RUMP_SYS_RENAME_KQUEUE

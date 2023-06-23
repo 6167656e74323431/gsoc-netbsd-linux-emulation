@@ -837,6 +837,11 @@ struct linux_sys_sched_getaffinity_args {
 };
 check_syscall_args(linux_sys_sched_getaffinity)
 
+struct linux_sys_epoll_create_args {
+	syscallarg(int) size;
+};
+check_syscall_args(linux_sys_epoll_create)
+
 struct linux_sys_getdents64_args {
 	syscallarg(int) fd;
 	syscallarg(struct linux_dirent64 *) dent;
@@ -912,6 +917,22 @@ struct linux_sys_exit_group_args {
 	syscallarg(int) error_code;
 };
 check_syscall_args(linux_sys_exit_group)
+
+struct linux_sys_epoll_wait_args {
+	syscallarg(int) epfd;
+	syscallarg(struct linux_epoll_event *) events;
+	syscallarg(int) maxevents;
+	syscallarg(int) timeout;
+};
+check_syscall_args(linux_sys_epoll_wait)
+
+struct linux_sys_epoll_ctl_args {
+	syscallarg(int) epfd;
+	syscallarg(int) op;
+	syscallarg(int) fd;
+	syscallarg(struct linux_epoll_event *) event;
+};
+check_syscall_args(linux_sys_epoll_ctl)
 
 struct linux_sys_tgkill_args {
 	syscallarg(int) tgid;
@@ -1032,6 +1053,15 @@ struct linux_sys_utimensat_args {
 };
 check_syscall_args(linux_sys_utimensat)
 
+struct linux_sys_epoll_pwait_args {
+	syscallarg(int) epfd;
+	syscallarg(struct linux_epoll_event *) events;
+	syscallarg(int) maxevents;
+	syscallarg(int) timeout;
+	syscallarg(const linux_sigset_t *) sigmask;
+};
+check_syscall_args(linux_sys_epoll_pwait)
+
 struct linux_sys_timerfd_create_args {
 	syscallarg(clockid_t) clock_id;
 	syscallarg(int) flags;
@@ -1078,6 +1108,11 @@ struct linux_sys_eventfd2_args {
 	syscallarg(int) flags;
 };
 check_syscall_args(linux_sys_eventfd2)
+
+struct linux_sys_epoll_create1_args {
+	syscallarg(int) flags;
+};
+check_syscall_args(linux_sys_epoll_create1)
 
 struct linux_sys_dup3_args {
 	syscallarg(int) from;
@@ -1145,6 +1180,15 @@ struct linux_sys_memfd_create_args {
 check_syscall_args(linux_sys_memfd_create)
 #else
 #endif
+
+struct linux_sys_epoll_pwait2_args {
+	syscallarg(int) epfd;
+	syscallarg(struct linux_epoll_event *) events;
+	syscallarg(int) maxevents;
+	syscallarg(const struct linux_timespec *) timeout;
+	syscallarg(const linux_sigset_t *) sigmask;
+};
+check_syscall_args(linux_sys_epoll_pwait2)
 
 /*
  * System call prototypes.
@@ -1523,6 +1567,8 @@ int	linux_sys_sched_setaffinity(struct lwp *, const struct linux_sys_sched_setaf
 
 int	linux_sys_sched_getaffinity(struct lwp *, const struct linux_sys_sched_getaffinity_args *, register_t *);
 
+int	linux_sys_epoll_create(struct lwp *, const struct linux_sys_epoll_create_args *, register_t *);
+
 int	linux_sys_getdents64(struct lwp *, const struct linux_sys_getdents64_args *, register_t *);
 
 int	linux_sys_set_tid_address(struct lwp *, const struct linux_sys_set_tid_address_args *, register_t *);
@@ -1548,6 +1594,10 @@ int	linux_sys_clock_getres(struct lwp *, const struct linux_sys_clock_getres_arg
 int	linux_sys_clock_nanosleep(struct lwp *, const struct linux_sys_clock_nanosleep_args *, register_t *);
 
 int	linux_sys_exit_group(struct lwp *, const struct linux_sys_exit_group_args *, register_t *);
+
+int	linux_sys_epoll_wait(struct lwp *, const struct linux_sys_epoll_wait_args *, register_t *);
+
+int	linux_sys_epoll_ctl(struct lwp *, const struct linux_sys_epoll_ctl_args *, register_t *);
 
 int	linux_sys_tgkill(struct lwp *, const struct linux_sys_tgkill_args *, register_t *);
 
@@ -1589,6 +1639,8 @@ int	sys___futex_get_robust_list(struct lwp *, const struct sys___futex_get_robus
 
 int	linux_sys_utimensat(struct lwp *, const struct linux_sys_utimensat_args *, register_t *);
 
+int	linux_sys_epoll_pwait(struct lwp *, const struct linux_sys_epoll_pwait_args *, register_t *);
+
 int	linux_sys_timerfd_create(struct lwp *, const struct linux_sys_timerfd_create_args *, register_t *);
 
 int	linux_sys_eventfd(struct lwp *, const struct linux_sys_eventfd_args *, register_t *);
@@ -1602,6 +1654,8 @@ int	linux_sys_timerfd_gettime(struct lwp *, const struct linux_sys_timerfd_getti
 int	linux_sys_accept4(struct lwp *, const struct linux_sys_accept4_args *, register_t *);
 
 int	linux_sys_eventfd2(struct lwp *, const struct linux_sys_eventfd2_args *, register_t *);
+
+int	linux_sys_epoll_create1(struct lwp *, const struct linux_sys_epoll_create1_args *, register_t *);
 
 int	linux_sys_dup3(struct lwp *, const struct linux_sys_dup3_args *, register_t *);
 
@@ -1624,6 +1678,8 @@ int	linux_sys_memfd_create(struct lwp *, const struct linux_sys_memfd_create_arg
 
 #else
 #endif
+int	linux_sys_epoll_pwait2(struct lwp *, const struct linux_sys_epoll_pwait2_args *, register_t *);
+
 int	linux_sys_nosys(struct lwp *, const void *, register_t *);
 
 #endif /* _LINUX_SYS_SYSCALLARGS_H_ */

@@ -1011,8 +1011,9 @@ struct sysent linux_sysent[] = {
 		.sy_call = linux_sys_nosys,
 	},		/* 212 = filler */
 	{
-		.sy_call = linux_sys_nosys,
-	},		/* 213 = filler */
+		ns(struct linux_sys_epoll_create_args),
+		.sy_call = (sy_call_t *)linux_sys_epoll_create
+	},		/* 213 = epoll_create */
 	{
 		.sy_call = linux_sys_nosys,
 	},		/* 214 = filler */
@@ -1091,11 +1092,15 @@ struct sysent linux_sysent[] = {
 		.sy_call = (sy_call_t *)linux_sys_exit_group
 	},		/* 231 = exit_group */
 	{
-		.sy_call = linux_sys_nosys,
-	},		/* 232 = filler */
+		ns(struct linux_sys_epoll_wait_args),
+		.sy_flags = SYCALL_ARG_PTR,
+		.sy_call = (sy_call_t *)linux_sys_epoll_wait
+	},		/* 232 = epoll_wait */
 	{
-		.sy_call = linux_sys_nosys,
-	},		/* 233 = filler */
+		ns(struct linux_sys_epoll_ctl_args),
+		.sy_flags = SYCALL_ARG_PTR,
+		.sy_call = (sy_call_t *)linux_sys_epoll_ctl
+	},		/* 233 = epoll_ctl */
 	{
 		ns(struct linux_sys_tgkill_args),
 		.sy_call = (sy_call_t *)linux_sys_tgkill
@@ -1277,8 +1282,10 @@ struct sysent linux_sysent[] = {
 		.sy_call = (sy_call_t *)linux_sys_utimensat
 	},		/* 280 = utimensat */
 	{
-		.sy_call = linux_sys_nosys,
-	},		/* 281 = filler */
+		ns(struct linux_sys_epoll_pwait_args),
+		.sy_flags = SYCALL_ARG_PTR,
+		.sy_call = (sy_call_t *)linux_sys_epoll_pwait
+	},		/* 281 = epoll_pwait */
 	{
 		.sy_call = linux_sys_nosys,
 	},		/* 282 = filler */
@@ -1318,8 +1325,9 @@ struct sysent linux_sysent[] = {
 		.sy_call = (sy_call_t *)linux_sys_eventfd2
 	},		/* 290 = eventfd2 */
 	{
-		.sy_call = linux_sys_nosys,
-	},		/* 291 = filler */
+		ns(struct linux_sys_epoll_create1_args),
+		.sy_call = (sy_call_t *)linux_sys_epoll_create1
+	},		/* 291 = epoll_create1 */
 	{
 		ns(struct linux_sys_dup3_args),
 		.sy_call = (sy_call_t *)linux_sys_dup3
@@ -1791,8 +1799,10 @@ struct sysent linux_sysent[] = {
 		.sy_call = linux_sys_nosys,
 	},		/* 440 = filler */
 	{
-		.sy_call = linux_sys_nosys,
-	},		/* 441 = filler */
+		ns(struct linux_sys_epoll_pwait2_args),
+		.sy_flags = SYCALL_ARG_PTR,
+		.sy_call = (sy_call_t *)linux_sys_epoll_pwait2
+	},		/* 441 = epoll_pwait2 */
 	{
 		.sy_call = linux_sys_nosys,
 	},		/* 442 = filler */

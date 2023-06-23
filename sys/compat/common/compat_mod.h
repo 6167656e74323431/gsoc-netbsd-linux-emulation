@@ -35,6 +35,8 @@
 #ifdef COMPAT_100
 int compat_100_init(void);
 int compat_100_fini(void);
+int kern_event_100_init(void);
+int kern_event_100_fini(void);
 #endif
 
 #ifdef COMPAT_90

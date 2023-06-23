@@ -279,7 +279,7 @@ const char *const linux_syscallnames[] = {
 	/* 210 */	"#210 (unimplemented io_cancel)",
 	/* 211 */	"#211 (unimplemented get_thread_area)",
 	/* 212 */	"#212 (unimplemented lookup_dcookie)",
-	/* 213 */	"#213 (unimplemented epoll_create)",
+	/* 213 */	"epoll_create",
 	/* 214 */	"#214 (unimplemented epoll_ctl_old)",
 	/* 215 */	"#215 (unimplemented epoll_wait_old)",
 	/* 216 */	"#216 (unimplemented remap_file_pages)",
@@ -298,8 +298,8 @@ const char *const linux_syscallnames[] = {
 	/* 229 */	"clock_getres",
 	/* 230 */	"clock_nanosleep",
 	/* 231 */	"exit_group",
-	/* 232 */	"#232 (unimplemented epoll_wait)",
-	/* 233 */	"#233 (unimplemented epoll_ctl)",
+	/* 232 */	"epoll_wait",
+	/* 233 */	"epoll_ctl",
 	/* 234 */	"tgkill",
 	/* 235 */	"utimes",
 	/* 236 */	"#236 (unimplemented vserver)",
@@ -347,7 +347,7 @@ const char *const linux_syscallnames[] = {
 	/* 278 */	"#278 (unimplemented vmsplice)",
 	/* 279 */	"#279 (unimplemented move_pages)",
 	/* 280 */	"utimensat",
-	/* 281 */	"#281 (unimplemented epoll_pwait)",
+	/* 281 */	"epoll_pwait",
 	/* 282 */	"#282 (unimplemented signalfd)",
 	/* 283 */	"timerfd_create",
 	/* 284 */	"eventfd",
@@ -357,7 +357,7 @@ const char *const linux_syscallnames[] = {
 	/* 288 */	"accept4",
 	/* 289 */	"#289 (unimplemented signalfd4)",
 	/* 290 */	"eventfd2",
-	/* 291 */	"#291 (unimplemented epoll_create1)",
+	/* 291 */	"epoll_create1",
 	/* 292 */	"dup3",
 	/* 293 */	"pipe2",
 	/* 294 */	"#294 (unimplemented inotify_init1)",
@@ -511,7 +511,7 @@ const char *const linux_syscallnames[] = {
 	/* 438 */	"#438 (unimplemented pidfd_getfd)",
 	/* 439 */	"#439 (unimplemented faccessat2)",
 	/* 440 */	"#440 (unimplemented process_madvise)",
-	/* 441 */	"#441 (unimplemented epoll_pwait2)",
+	/* 441 */	"epoll_pwait2",
 	/* 442 */	"#442 (unimplemented mount_setattr)",
 	/* 443 */	"#443 (unimplemented quotactl_fd)",
 	/* 444 */	"#444 (unimplemented landlock_create_ruleset)",
@@ -827,7 +827,7 @@ const char *const altlinux_syscallnames[] = {
 	/* 210 */	NULL, /* unimplemented io_cancel */
 	/* 211 */	NULL, /* unimplemented get_thread_area */
 	/* 212 */	NULL, /* unimplemented lookup_dcookie */
-	/* 213 */	NULL, /* unimplemented epoll_create */
+	/* 213 */	NULL, /* epoll_create */
 	/* 214 */	NULL, /* unimplemented epoll_ctl_old */
 	/* 215 */	NULL, /* unimplemented epoll_wait_old */
 	/* 216 */	NULL, /* unimplemented remap_file_pages */
@@ -846,8 +846,8 @@ const char *const altlinux_syscallnames[] = {
 	/* 229 */	NULL, /* clock_getres */
 	/* 230 */	NULL, /* clock_nanosleep */
 	/* 231 */	NULL, /* exit_group */
-	/* 232 */	NULL, /* unimplemented epoll_wait */
-	/* 233 */	NULL, /* unimplemented epoll_ctl */
+	/* 232 */	NULL, /* epoll_wait */
+	/* 233 */	NULL, /* epoll_ctl */
 	/* 234 */	NULL, /* tgkill */
 	/* 235 */	NULL, /* utimes */
 	/* 236 */	NULL, /* unimplemented vserver */
@@ -895,7 +895,7 @@ const char *const altlinux_syscallnames[] = {
 	/* 278 */	NULL, /* unimplemented vmsplice */
 	/* 279 */	NULL, /* unimplemented move_pages */
 	/* 280 */	NULL, /* utimensat */
-	/* 281 */	NULL, /* unimplemented epoll_pwait */
+	/* 281 */	NULL, /* epoll_pwait */
 	/* 282 */	NULL, /* unimplemented signalfd */
 	/* 283 */	NULL, /* timerfd_create */
 	/* 284 */	NULL, /* eventfd */
@@ -905,7 +905,7 @@ const char *const altlinux_syscallnames[] = {
 	/* 288 */	NULL, /* accept4 */
 	/* 289 */	NULL, /* unimplemented signalfd4 */
 	/* 290 */	NULL, /* eventfd2 */
-	/* 291 */	NULL, /* unimplemented epoll_create1 */
+	/* 291 */	NULL, /* epoll_create1 */
 	/* 292 */	NULL, /* dup3 */
 	/* 293 */	NULL, /* pipe2 */
 	/* 294 */	NULL, /* unimplemented inotify_init1 */
@@ -1059,7 +1059,7 @@ const char *const altlinux_syscallnames[] = {
 	/* 438 */	NULL, /* unimplemented pidfd_getfd */
 	/* 439 */	NULL, /* unimplemented faccessat2 */
 	/* 440 */	NULL, /* unimplemented process_madvise */
-	/* 441 */	NULL, /* unimplemented epoll_pwait2 */
+	/* 441 */	NULL, /* epoll_pwait2 */
 	/* 442 */	NULL, /* unimplemented mount_setattr */
 	/* 443 */	NULL, /* unimplemented quotactl_fd */
 	/* 444 */	NULL, /* unimplemented landlock_create_ruleset */

@@ -1,4 +1,4 @@
-/* $NetBSD: rump_syscalls.c,v 1.157 2021/11/01 05:26:28 thorpej Exp $ */
+/* $NetBSD$ */
 
 /*
  * System call vector and marshalling for rump.
@@ -15,7 +15,7 @@
 
 #ifdef __NetBSD__
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rump_syscalls.c,v 1.157 2021/11/01 05:26:28 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD$");
 
 #include <sys/fstypes.h>
 #include <sys/proc.h>
@@ -3520,9 +3520,9 @@ rump___sysimpl_kevent(int fd, const struct kevent * changelist, size_t nchanges,
 
 	memset(&callarg, 0, sizeof(callarg));
 	SPARG(&callarg, fd) = fd;
-	SPARG(&callarg, changelist) = changelist;
+	SPARG(&callarg, changelist) = (const struct kevent100 *)changelist;
 	SPARG(&callarg, nchanges) = nchanges;
-	SPARG(&callarg, eventlist) = eventlist;
+	SPARG(&callarg, eventlist) = (struct kevent100 *)eventlist;
 	SPARG(&callarg, nevents) = nevents;
 	SPARG(&callarg, timeout) = (const struct timespec50 *)timeout;
 
@@ -5325,6 +5325,7 @@ __weak_alias(___nanosleep50,rump___sysimpl_nanosleep50);
 __strong_alias(_sys___nanosleep50,rump___sysimpl_nanosleep50);
 #endif /* RUMP_KERNEL_IS_LIBC */
 
+#ifdef RUMP_SYS_COMPAT
 int rump___sysimpl_kevent50(int, const struct kevent *, size_t, struct kevent *, size_t, const struct timespec *);
 int
 rump___sysimpl_kevent50(int fd, const struct kevent * changelist, size_t nchanges, struct kevent * eventlist, size_t nevents, const struct timespec * timeout)
@@ -5332,17 +5333,17 @@ rump___sysimpl_kevent50(int fd, const struct kevent * changelist, size_t nchange
 	register_t retval[2];
 	int error = 0;
 	int rv = -1;
-	struct sys___kevent50_args callarg;
+	struct compat_100_sys___kevent50_args callarg;
 
 	memset(&callarg, 0, sizeof(callarg));
 	SPARG(&callarg, fd) = fd;
-	SPARG(&callarg, changelist) = changelist;
+	SPARG(&callarg, changelist) = (const struct kevent100 *)changelist;
 	SPARG(&callarg, nchanges) = nchanges;
-	SPARG(&callarg, eventlist) = eventlist;
+	SPARG(&callarg, eventlist) = (struct kevent100 *)eventlist;
 	SPARG(&callarg, nevents) = nevents;
 	SPARG(&callarg, timeout) = timeout;
 
-	error = rsys_syscall(SYS___kevent50, &callarg, sizeof(callarg), retval);
+	error = rsys_syscall(SYS_compat_100___kevent50, &callarg, sizeof(callarg), retval);
 	rsys_seterrno(error);
 	if (error == 0) {
 		if (sizeof(int) > sizeof(register_t))
@@ -5358,6 +5359,7 @@ __weak_alias(__kevent50,rump___sysimpl_kevent50);
 __weak_alias(___kevent50,rump___sysimpl_kevent50);
 __strong_alias(_sys___kevent50,rump___sysimpl_kevent50);
 #endif /* RUMP_KERNEL_IS_LIBC */
+#endif /* RUMP_SYS_COMPAT */
 
 int rump___sysimpl_pselect50(int, fd_set *, fd_set *, fd_set *, const struct timespec *, const sigset_t *);
 int
@@ -6610,6 +6612,40 @@ rump___sysimpl_lpathconf(const char * path, int name)
 __weak_alias(lpathconf,rump___sysimpl_lpathconf);
 __weak_alias(_lpathconf,rump___sysimpl_lpathconf);
 __strong_alias(_sys_lpathconf,rump___sysimpl_lpathconf);
+#endif /* RUMP_KERNEL_IS_LIBC */
+
+int rump___sysimpl_kevent100(int, const struct kevent *, size_t, struct kevent *, size_t, const struct timespec *);
+int
+rump___sysimpl_kevent100(int fd, const struct kevent * changelist, size_t nchanges, struct kevent * eventlist, size_t nevents, const struct timespec * timeout)
+{
+	register_t retval[2];
+	int error = 0;
+	int rv = -1;
+	struct sys___kevent100_args callarg;
+
+	memset(&callarg, 0, sizeof(callarg));
+	SPARG(&callarg, fd) = fd;
+	SPARG(&callarg, changelist) = changelist;
+	SPARG(&callarg, nchanges) = nchanges;
+	SPARG(&callarg, eventlist) = eventlist;
+	SPARG(&callarg, nevents) = nevents;
+	SPARG(&callarg, timeout) = timeout;
+
+	error = rsys_syscall(SYS___kevent100, &callarg, sizeof(callarg), retval);
+	rsys_seterrno(error);
+	if (error == 0) {
+		if (sizeof(int) > sizeof(register_t))
+			rv = *(int *)retval;
+		else
+			rv = *retval;
+	}
+	return rv;
+}
+#ifdef RUMP_KERNEL_IS_LIBC
+__weak_alias(kevent,rump___sysimpl_kevent100);
+__weak_alias(__kevent100,rump___sysimpl_kevent100);
+__weak_alias(___kevent100,rump___sysimpl_kevent100);
+__strong_alias(_sys___kevent100,rump___sysimpl_kevent100);
 #endif /* RUMP_KERNEL_IS_LIBC */
 
 int rump_sys_pipe(int *);
@@ -8323,9 +8359,9 @@ struct sysent rump_sysent[] = {
 		.sy_call = (sy_call_t *)(void *)rumpns_sys_nomodule,
 },		/* 434 = _lwp_park */
 	{
-		ns(struct sys___kevent50_args),
-		.sy_call = (sy_call_t *)(void *)rumpns_enosys,
-	},		/* 435 = __kevent50 */
+		ns(struct compat_100_sys___kevent50_args),
+		.sy_call = (sy_call_t *)(void *)rumpns_sys_nomodule,
+	},		/* 435 = compat_100___kevent50 */
 	{
 		ns(struct sys___pselect50_args),
 		.sy_call = (sy_call_t *)(void *)rumpns_enosys,
@@ -8571,9 +8607,9 @@ struct sysent rump_sysent[] = {
 		.sy_call = (sy_call_t *)(void *)rumpns_enosys,
 	},		/* 499 = lpathconf */
 	{
-		.sy_flags = SYCALL_NOSYS,
+		ns(struct sys___kevent100_args),
 		.sy_call = (sy_call_t *)(void *)rumpns_enosys,
-	},		/* 500 = filler */
+	},		/* 500 = __kevent100 */
 	{
 		.sy_flags = SYCALL_NOSYS,
 		.sy_call = (sy_call_t *)(void *)rumpns_enosys,
@@ -8634,7 +8670,7 @@ const uint32_t rump_sysent_nomodbits[] = {
 	0x0200fc01,	/* syscalls 320-351 */
 	0x006000f0,	/* syscalls 352-383 */
 	0x007fe338,	/* syscalls 384-415 */
-	0x1c470040,	/* syscalls 416-447 */
+	0x1c4f0040,	/* syscalls 416-447 */
 	0x00000000,	/* syscalls 448-479 */
 	0x00000000,	/* syscalls 480-511 */
 };
