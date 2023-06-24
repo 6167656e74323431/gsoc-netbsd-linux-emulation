@@ -30,7 +30,7 @@ is retained and moved to a new location that holds the compatibility syscalls
 .Pa ( src/sys/compat ) .
 Kernels can be compiled with or without backwards compatibility syscalls.
 See the
-.Dv COMPAT_XX
+.Li COMPAT_XX
 options in
 .Xr options 4 .
 .Pp
@@ -41,7 +41,7 @@ The new stub is added to libc, and in the header file the syscall symbol is
 made to point to the new name with the new ABI.
 .Pp
 This is done via symbol renaming instead of ELF versioned symbols for
-historical reasons. 
+historical reasons.
 .Nx
 has retained binary compatibility with most syscalls since
 .Nx 0.9 
@@ -65,14 +65,25 @@ Additionally,
 always represents the last
 .Nx
 release where the current
-version of the system call is the default, multiplied by ten.
+version of the system call is the default, multiplied by ten and retaining a
+leading zero.
+For example
+.Nx 0.9
+has
+.Li COMPAT_09
+whereas
+.Nx 10.0
+has
+.Li COMPAT_100 .
 .Sh VERSIONING THE SYSCALL
 This section describes what needs to be modified to add the new version of the
-syscall.  It assumes the current version of the syscall is
+syscall.
+It assumes the current version of the syscall is
 .Fn my_syscall struct\ my_struct\ *ms
 and that
 .Li my_struct
-will be versioned.  If not versioning a struct, passages that mention
+will be versioned.
+If not versioning a struct, passages that mention
 .Li my_struct
 can be ignored.
 .Ss Versioning structs
@@ -110,6 +121,14 @@ Next, modify the current version of the syscall, and replace the type
 field (usually just STD) with
 .Li COMPAT_XYZ MODULAR compat_XYZ .
 .Pp
+The keyword
+.Li MODULAR
+indicates that the system call can be part of a kernel module.
+Even if the system call was not part of a module before, now it will be part
+of the
+.Li COMPAT_XYZ
+module.
+.Pp
 Finally, if applicable, replace the types of the current and old versions of the
 syscall with the compat type.
 .Pp
@@ -136,6 +155,15 @@ by adding and entry for
 type to
 .Li uncompattypes .
 .Pp
+The
+.Li uncompattypes 
+map is used in
+.Xr rump 7
+system call table generation, to map from the versioned types to the original
+names since
+.Xr rump 7
+wants to have a non-versioned copy of the system call table.
+.Pp
 Then regenerate the syscall tables in the usual way, first by running
 .Pa sys/kern/makesyscalls.sh ,
 then if the system call is rump, doing a build in
@@ -147,7 +175,8 @@ argument.
 .Sh KERNEL COMPATIBILITY
 This section covers maintaining compatibility at the kernel level, by
 adding an entry point for the current syscall in an appropriate compat
-module.  For the purposes of this section, we assume the current
+module.
+For the purposes of this section, we assume the current
 syscall has entry point
 .Fn sys_my_syscall
 and lives inside
@@ -157,9 +186,9 @@ The compat version of the current syscall has entry point
 .Fn compat_XYZ_sys_my_syscall ,
 and should be implemented in
 .Pa sys/compat/common/my_file_XYZ.c
-with the same semantics as the current syscall.  Often this involves
-translating the arguments to the next syscall, and then calling that
-syscall's entry point.
+with the same semantics as the current syscall.
+Often this involves translating the arguments to the next syscall,
+and then calling that syscall's entry point.
 .Ss Adding it to the compat module
 .Pa sys/compat/common/my_file_XYZ.c
 must contain an array of
@@ -178,8 +207,8 @@ At the minimum they must make calls to
 .Fn syscall_establish
 and
 .Fn syscall_disestablish
-respectively, adding and removing the syscalls.  The stubs for these
-functions should be located in
+respectively, adding and removing the syscalls.
+The stubs for these functions should be located in
 .Pa sys/compat/common/compat_mod.h .
 .Pp
 Overall,
@@ -218,8 +247,9 @@ and
 If the current syscall has already been versioned, you might need to
 modify the old compat syscalls in
 .Pa sys/compat/common
-to either use the next syscall or the current compat syscall.  Note that compat
-code can be made to depend on compat code for more recent releases.
+to either use the next syscall or the current compat syscall.
+Note that compat code can be made to depend on compat code for more
+recent releases.
 .Sh USERLAND COMPATIBILITY
 With the exception of the libraries described below, making the rest of userland
 work will just involve recompiling, and perhaps changing a constant or a
