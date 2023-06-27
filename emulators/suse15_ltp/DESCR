@@ -2,5 +2,25 @@ Linux compatibility package based on the openSUSE Linux distribution.
 Please visit http://www.opensuse.org/ for more information about openSUSE
 Linux.
 
-This package supports compiles the Linux Test Project under NetBSD's
-Linux emulation.  It makes it easier to test NetBSD's Linux emulation.
+This package supports compiles the Linux Test Project (LTP under NetBSD's Linux
+emulation.  It allows for testing NetBSD's Linux emulation with the same tests
+used for Linux itself.
+
+LTP is installed in /emul/linux/opt/ltp.  The full test suite can be run by
+running
+
+	./runltp
+
+from that directory as root, and the results will be written to the
+/emul/linux/opt/ltp/output and /emul/linux/opt/ltp/results directories.
+
+Additionally passing -s PATTERN to ./runltp only runs tests that include PATTERN
+in their name.  For example
+
+	./runltp -s wait
+
+runs all tests that include wait in their name.  This includes all the
+tests for wait, waitid, epoll_wait, sigwait (and many more).
+
+For a description of all the available options --help can be passed to
+./runltp.
