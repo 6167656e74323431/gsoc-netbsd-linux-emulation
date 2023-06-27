@@ -3366,6 +3366,14 @@ struct sys___kevent100_args {
 };
 check_syscall_args(sys___kevent100)
 
+#ifndef RUMP_CLIENT
+struct sys_memfd_create_args {
+	syscallarg(const char *) name;
+	syscallarg(unsigned int) flags;
+};
+check_syscall_args(sys_memfd_create)
+#endif /* !RUMP_CLIENT */
+
 /*
  * System call prototypes.
  */
@@ -4291,6 +4299,8 @@ int	sys___acl_aclcheck_fd(struct lwp *, const struct sys___acl_aclcheck_fd_args 
 int	sys_lpathconf(struct lwp *, const struct sys_lpathconf_args *, register_t *);
 
 int	sys___kevent100(struct lwp *, const struct sys___kevent100_args *, register_t *);
+
+int	sys_memfd_create(struct lwp *, const struct sys_memfd_create_args *, register_t *);
 
 #endif /* !RUMP_CLIENT */
 #endif /* _SYS_SYSCALLARGS_H_ */

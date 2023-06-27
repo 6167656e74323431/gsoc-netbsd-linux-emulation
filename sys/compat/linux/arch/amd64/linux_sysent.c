@@ -1424,17 +1424,11 @@ struct sysent linux_sysent[] = {
 		.sy_flags = SYCALL_ARG_PTR,
 		.sy_call = (sy_call_t *)sys_getrandom
 	},		/* 318 = getrandom */
-#ifdef SYSVSHM
 	{
-		ns(struct linux_sys_memfd_create_args),
+		ns(struct sys_memfd_create_args),
 		.sy_flags = SYCALL_ARG_PTR,
-		.sy_call = (sy_call_t *)linux_sys_memfd_create
+		.sy_call = (sy_call_t *)sys_memfd_create
 	},		/* 319 = memfd_create */
-#else
-	{
-		.sy_call = linux_sys_nosys,
-	},		/* 319 = filler */
-#endif
 	{
 		.sy_call = linux_sys_nosys,
 	},		/* 320 = filler */

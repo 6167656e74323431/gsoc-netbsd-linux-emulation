@@ -1054,3 +1054,5 @@
 			    const struct kevent *changelist, size_t nchanges, \
 			    struct kevent *eventlist, size_t nevents, \
 			    const struct timespec *timeout); }
+501	STD		{ int|sys||memfd_create(const char *name, \
+			    unsigned int flags); }

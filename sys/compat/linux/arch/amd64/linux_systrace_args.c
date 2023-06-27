@@ -1980,17 +1980,14 @@ systrace_args(register_t sysnum, const void *params, uintptr_t *uarg, size_t *n_
 		*n_args = 3;
 		break;
 	}
-#ifdef SYSVSHM
-	/* linux_sys_memfd_create */
+	/* sys_memfd_create */
 	case 319: {
-		const struct linux_sys_memfd_create_args *p = params;
+		const struct sys_memfd_create_args *p = params;
 		uarg[0] = (intptr_t) SCARG(p, name); /* const char * */
 		uarg[1] = SCARG(p, flags); /* unsigned int */
 		*n_args = 2;
 		break;
 	}
-#else
-#endif
 	/* linux_sys_epoll_pwait2 */
 	case 441: {
 		const struct linux_sys_epoll_pwait2_args *p = params;
@@ -5323,8 +5320,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			break;
 		};
 		break;
-#ifdef SYSVSHM
-	/* linux_sys_memfd_create */
+	/* sys_memfd_create */
 	case 319:
 		switch(ndx) {
 		case 0:
@@ -5337,8 +5333,6 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			break;
 		};
 		break;
-#else
-#endif
 	/* linux_sys_epoll_pwait2 */
 	case 441:
 		switch(ndx) {
@@ -6502,14 +6496,11 @@ systrace_return_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 		if (ndx == 0 || ndx == 1)
 			p = "ssize_t";
 		break;
-#ifdef SYSVSHM
-	/* linux_sys_memfd_create */
+	/* sys_memfd_create */
 	case 319:
 		if (ndx == 0 || ndx == 1)
 			p = "int";
 		break;
-#else
-#endif
 	/* linux_sys_epoll_pwait2 */
 	case 441:
 		if (ndx == 0 || ndx == 1)

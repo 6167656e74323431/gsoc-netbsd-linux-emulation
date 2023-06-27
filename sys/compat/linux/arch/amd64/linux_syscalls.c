@@ -385,11 +385,7 @@ const char *const linux_syscallnames[] = {
 	/* 316 */	"#316 (unimplemented renameat2)",
 	/* 317 */	"#317 (unimplemented seccomp)",
 	/* 318 */	"getrandom",
-#ifdef SYSVSHM
 	/* 319 */	"memfd_create",
-#else
-	/* 319 */	"#319 (unimplemented memfd_create)",
-#endif
 	/* 320 */	"#320 (unimplemented kexec_file_load)",
 	/* 321 */	"#321 (unimplemented bpf)",
 	/* 322 */	"#322 (unimplemented execveat)",
@@ -933,11 +929,7 @@ const char *const altlinux_syscallnames[] = {
 	/* 316 */	NULL, /* unimplemented renameat2 */
 	/* 317 */	NULL, /* unimplemented seccomp */
 	/* 318 */	NULL, /* getrandom */
-#ifdef SYSVSHM
 	/* 319 */	NULL, /* memfd_create */
-#else
-	/* 319 */	NULL, /* unimplemented memfd_create */
-#endif
 	/* 320 */	NULL, /* unimplemented kexec_file_load */
 	/* 321 */	NULL, /* unimplemented bpf */
 	/* 322 */	NULL, /* unimplemented execveat */

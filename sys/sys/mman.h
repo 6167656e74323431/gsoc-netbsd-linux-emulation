@@ -214,6 +214,12 @@ typedef	__off_t		off_t;		/* file offset */
 #define	MAP_INHERIT_DEFAULT	MAP_INHERIT_COPY
 #endif
 
+/*
+ * Flags to memfd_create
+ */
+#define MFD_CLOEXEC 1
+// GTODO rest of the MFD_ flags that aren't too linux specific
+
 #ifndef _KERNEL
 
 #include <sys/cdefs.h>
@@ -238,6 +244,7 @@ void *	mremap(void *, size_t, void *, size_t, int);
 int	posix_madvise(void *, size_t, int);
 int	shm_open(const char *, int, mode_t);
 int	shm_unlink(const char *);
+int	memfd_create(const char *, unsigned int);
 __END_DECLS
 
 #endif /* !_KERNEL */
