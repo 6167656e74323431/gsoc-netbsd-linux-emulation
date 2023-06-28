@@ -24,7 +24,7 @@ static int memfd_mmap(struct file *fp, off_t *offp, size_t size, int prot,
 static int memfd_seek(struct file *fp, off_t delta, int whence,
     off_t *newoffp, int flags);
 
-static int do_memfd_ftruncate(struct memfd *mfd, off_t newsize);
+static int do_memfd_truncate(struct memfd *mfd, off_t newsize);
 
 static const struct fileops memfd_fileops = {
 	.fo_name = "memfd",
@@ -42,7 +42,7 @@ static const struct fileops memfd_fileops = {
 	.fo_advlock = (void *)eopnotsupp, // GTODO
 	.fo_fpathconf = (void *)eopnotsupp, // GTODO
 	.fo_posix_fadvise = (void *)eopnotsupp, // GTODO
-	// GTODO .fo_ftruncate
+	// GTODO .fo_truncate
 };
 
 int
@@ -66,7 +66,7 @@ sys_memfd_create(struct lwp *l, const struct sys_memfd_create_args *uap,
 
 	mfd = kmem_zalloc(sizeof(*mfd), KM_SLEEP);
 	mfd->mfd_size = 0;
-	mfd->mfd_uobj = uao_create(1, 0); /* uobj size must be positive */
+	mfd->mfd_uobj = uao_create(INT64_MAX - PAGE_SIZE, 0); /* same as tmpfs */ // GTODO can't shrink
 
 	error = fd_allocfile(&fp, &fd);
 	if (error != 0)
@@ -140,7 +140,7 @@ memfd_write(file_t *fp, off_t *offp, struct uio *uio, kauth_cred_t cred,
 
 	/* Grow to accommodate the write request. */
 	if (*offp + uio->uio_resid >= mfd->mfd_size) {
-		error = do_memfd_ftruncate(mfd, *offp + uio->uio_resid);
+		error = do_memfd_truncate(mfd, *offp + uio->uio_resid);
 		if (error != 0)
 			goto leave;
 	}
@@ -208,7 +208,7 @@ memfd_seek(struct file *fp, off_t delta, int whence, off_t *newoffp,
 }
 
 static int
-do_memfd_ftruncate(struct memfd *mfd, off_t newsize)
+do_memfd_truncate(struct memfd *mfd, off_t newsize)
 {
 	if (newsize < 0)
 		return EINVAL;
