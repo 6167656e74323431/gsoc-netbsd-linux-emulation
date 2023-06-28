@@ -1765,3 +1765,38 @@ linux_sys_eventfd2(struct lwp *l, const struct linux_sys_eventfd2_args *uap,
 	return linux_do_eventfd2(l, SCARG(uap, initval), SCARG(uap, flags),
 				 retval);
 }
+
+#define LINUX_MFD_CLOEXEC	0x0001U
+#define LINUX_MFD_ALLOW_SEALING	0x0002U
+#define LINUX_MFD_HUGETLB	0x0004U
+#define LINUX_MFD_NOEXEC_SEAL	0x0008U
+#define LINUX_MFD_EXEC		0x0010U
+#define LINUX_MFD_HUGE_MASK	0x3f
+
+int
+linux_sys_memfd_create(struct lwp *l, const struct linux_sys_memfd_create_args *uap,
+    register_t *retval)
+{
+	/* {
+		syscallarg(const char *) name;
+		syscallarg(unsigned int) flags;
+	} */
+	struct sys_memfd_create_args muap;
+	const unsigned int lflags = SCARG(uap, flags);
+
+	if ((lflags & LINUX_MFD_HUGETLB) && (lflags & LINUX_MFD_ALLOW_SEALING))
+		return EINVAL;
+
+	if (lflags & LINUX_MFD_HUGETLB)
+		DPRINTF(("linux_sys_memfd_create: ignored set flag MFD_HUGETLB flags=%x\n",
+		    lflags));
+
+	SCARG(&muap, name) = SCARG(uap, name);
+
+	/* Except for LINUX_MFD_HUGETLB, NetBSD's MFD_ flags are the
+	   same as Linux's.. */
+	SCARG(&muap, flags) = lflags & LINUX_MFD_HUGE_MASK;
+	SCARG(&muap, flags) &= ~LINUX_MFD_HUGETLB;
+
+	return sys_memfd_create(l, &muap, retval);
+}

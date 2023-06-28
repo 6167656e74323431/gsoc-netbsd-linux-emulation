@@ -489,6 +489,15 @@ sys_fcntl(struct lwp *l, const struct sys_fcntl_args *uap, register_t *retval)
 		error = do_fcntl_getpath(l, fp, SCARG(uap, arg));
 		break;
 
+	case F_ADD_SEALS:
+		error = (*fp->f_ops->fo_fcntl)(fp, F_GET_SEALS, SCARG(uap, arg));
+		break;
+
+	case F_GET_SEALS:
+		error = (*fp->f_ops->fo_fcntl)(fp, F_GET_SEALS, &tmp);
+		*retval = tmp;
+		break;
+
 	default:
 		error = EINVAL;
 	}

@@ -200,7 +200,10 @@
 #define	F_GETNOSIGPIPE	13		/* get SIGPIPE disposition */
 #define	F_SETNOSIGPIPE	14		/* set SIGPIPE disposition */
 #define	F_GETPATH	15		/* get pathname associated with fd */
+#define F_ADD_SEALS	16		/* set seals */
+#define F_GET_SEALS	17		/* get seals */
 #endif
+
 
 /* file descriptor flags (F_GETFD, F_SETFD) */
 #define	FD_CLOEXEC	1		/* close-on-exec flag */
@@ -213,6 +216,17 @@
 #define	F_WAIT		0x010		/* Wait until lock is granted */
 #define	F_FLOCK		0x020	 	/* Use flock(2) semantics for lock */
 #define	F_POSIX		0x040	 	/* Use POSIX semantics for lock */
+#endif
+
+/* types of seals (F_ADD_SEALS, F_GET_SEALS) */
+#if defined(_NETBSD_SOURCE)
+#define F_SEAL_SEAL		0x0001	/* prevent further seals from being set */
+#define F_SEAL_SHRINK		0x0002	/* prevent file from shrinking */
+#define F_SEAL_GROW		0x0004	/* prevent file from growing */
+#define F_SEAL_WRITE		0x0008	/* prevent writes */
+#define F_SEAL_FUTURE_WRITE	0x0010  /* prevent future writes while mapped */
+#define F_SEAL_EXEC		0x0020  /* prevent chmod modifying exec bits */
+/* (1U <<31) is reserved. */
 #endif
 
 /* Constants for fcntl's passed to the underlying fs - like ioctl's. */

@@ -440,6 +440,14 @@ linux_sys_fcntl(struct lwp *l, const struct linux_sys_fcntl_args *uap, register_
 		cmd = F_DUPFD_CLOEXEC;
 		break;
 
+	case LINUX_F_ADD_SEALS:
+		cmd = F_ADD_SEALS;
+		break;
+
+	case LINUX_F_GET_SEALS:
+		cmd = F_GET_SEALS;
+		break;
+
 	default:
 		return EOPNOTSUPP;
 	}

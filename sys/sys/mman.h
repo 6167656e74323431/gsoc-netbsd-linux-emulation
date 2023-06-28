@@ -217,8 +217,11 @@ typedef	__off_t		off_t;		/* file offset */
 /*
  * Flags to memfd_create
  */
-#define MFD_CLOEXEC 1
-// GTODO rest of the MFD_ flags that aren't too linux specific
+#define MFD_CLOEXEC		0x1U
+#define MFD_ALLOW_SEALING	0x2U
+// GTODO these two
+#define MFD_NOEXEC_SEAL		0x8U
+#define MFD_EXEC		0x10U
 
 #ifndef _KERNEL
 

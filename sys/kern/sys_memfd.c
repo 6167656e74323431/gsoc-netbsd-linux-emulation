@@ -12,12 +12,14 @@ struct memfd {
 //	kmutex_t 		mfd_lock; GTODO for close
 	struct uvm_object	*mfd_uobj;
 	size_t			mfd_size;
+	int		        mfd_seals;
 };
 
 static int memfd_read(file_t *fp, off_t *offp, struct uio *uio,
     kauth_cred_t cred, int flags);
 static int memfd_write(file_t *fp, off_t *offp, struct uio *uio,
     kauth_cred_t cred, int flags);
+static int memfd_fcntl(file_t *fp, u_int cmd, void *data);
 static int memfd_close(file_t *fp);
 static int memfd_mmap(struct file *fp, off_t *offp, size_t size, int prot,
     int *flagsp, int *advicep, struct uvm_object **uobjp, int *maxprotp);
@@ -31,7 +33,7 @@ static const struct fileops memfd_fileops = {
 	.fo_read = memfd_read,
 	.fo_write = memfd_write,
 	.fo_ioctl = (void *)eopnotsupp, // GTODO
-	.fo_fcntl = (void *)eopnotsupp, // GTODO
+	.fo_fcntl = memfd_fcntl,
 	.fo_poll = fnullop_poll,
 	.fo_stat = (void *)eopnotsupp, // GTODO
 	.fo_close = memfd_close,
@@ -55,18 +57,26 @@ sys_memfd_create(struct lwp *l, const struct sys_memfd_create_args *uap,
 	} */
 	int error, fd;
 	file_t *fp;
+	size_t done;
 	struct memfd *mfd;
 	struct proc *p = l->l_proc;
 	const unsigned int flags = SCARG(uap, flags);
 
-	if (SCARG(uap, name) == NULL)
-		return EINVAL;
-
-	// GTODO copy the name with memfd: prefix and check length
-
 	mfd = kmem_zalloc(sizeof(*mfd), KM_SLEEP);
 	mfd->mfd_size = 0;
-	mfd->mfd_uobj = uao_create(INT64_MAX - PAGE_SIZE, 0); /* same as tmpfs */ // GTODO can't shrink
+	mfd->mfd_uobj = uao_create(INT64_MAX - PAGE_SIZE, 0); /* same as tmpfs */
+
+	strcpy(mfd->mfd_name, "memfd:");
+	error = copyinstr(SCARG(uap, name), &mfd->mfd_name[6], 250, &done);
+	if (error != 0)
+		goto leave;
+	if (done > 249) {
+		error = EINVAL;
+		goto leave;
+	}
+
+	if ((flags & MFD_ALLOW_SEALING) == 0)
+		mfd->mfd_seals |= F_SEAL_SEAL;
 
 	error = fd_allocfile(&fp, &fd);
 	if (error != 0)
@@ -130,6 +140,9 @@ memfd_write(file_t *fp, off_t *offp, struct uio *uio, kauth_cred_t cred,
 	vsize_t todo;
 	struct memfd *mfd = fp->f_memfd;
 
+	if (mfd->mfd_seals & (F_SEAL_WRITE|F_SEAL_FUTURE_WRITE))
+		return EPERM;
+
 	if (offp == &fp->f_offset)
 		mutex_enter(&fp->f_lock);
 
@@ -155,6 +168,28 @@ leave:
 		mutex_exit(&fp->f_lock);
 	
 	return error;
+}
+
+static int
+memfd_fcntl(file_t *fp, u_int cmd, void *data)
+{
+	struct memfd *mfd = fp->f_memfd;
+
+	switch (cmd) {
+	case F_ADD_SEALS:
+		if (mfd->mfd_seals & F_SEAL_SEAL)
+			return EPERM;
+
+	        mfd->mfd_seals |= *(int *)data;
+		return 0;
+
+	case F_GET_SEALS:
+		*(int *)data = mfd->mfd_seals;
+		return 0;
+
+	default:
+		return EOPNOTSUPP;
+	}
 }
 
 static int
@@ -210,6 +245,11 @@ memfd_seek(struct file *fp, off_t delta, int whence, off_t *newoffp,
 static int
 do_memfd_truncate(struct memfd *mfd, off_t newsize)
 {
+	if ((mfd->mfd_seals & F_SEAL_SHRINK) && newsize < mfd->mfd_size)
+		return EPERM;
+	if ((mfd->mfd_seals & F_SEAL_GROW) && newsize > mfd->mfd_size)
+		return EPERM;
+
 	if (newsize < 0)
 		return EINVAL;
 

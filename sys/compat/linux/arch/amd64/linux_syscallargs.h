@@ -1172,7 +1172,11 @@ check_syscall_args(linux_sys_sendmmsg)
 
 struct sys_getrandom_args;
 
-struct sys_memfd_create_args;
+struct linux_sys_memfd_create_args {
+	syscallarg(const char *) name;
+	syscallarg(unsigned int) flags;
+};
+check_syscall_args(linux_sys_memfd_create)
 
 struct linux_sys_epoll_pwait2_args {
 	syscallarg(int) epfd;
@@ -1666,7 +1670,7 @@ int	linux_sys_sendmmsg(struct lwp *, const struct linux_sys_sendmmsg_args *, reg
 
 int	sys_getrandom(struct lwp *, const struct sys_getrandom_args *, register_t *);
 
-int	sys_memfd_create(struct lwp *, const struct sys_memfd_create_args *, register_t *);
+int	linux_sys_memfd_create(struct lwp *, const struct linux_sys_memfd_create_args *, register_t *);
 
 int	linux_sys_epoll_pwait2(struct lwp *, const struct linux_sys_epoll_pwait2_args *, register_t *);
 

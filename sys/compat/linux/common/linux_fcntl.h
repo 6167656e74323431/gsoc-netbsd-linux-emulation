@@ -100,6 +100,8 @@ struct linux_flock64 {
 #define	LINUX_F_DUPFD_CLOEXEC 	(LINUX_F_SPECIFIC_BASE + 6)
 #define	LINUX_F_SETPIPE_SZ 	(LINUX_F_SPECIFIC_BASE + 7)
 #define	LINUX_F_GETPIPE_SZ 	(LINUX_F_SPECIFIC_BASE + 8)
+#define LINUX_F_ADD_SEALS	(LINUX_F_SPECIFIC_BASE + 9)
+#define LINUX_F_GET_SEALS	(LINUX_F_SPECIFIC_BASE + 10)
 
 /*
  * We have to have 4 copies of the code that converts linux fcntl() file
