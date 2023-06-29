@@ -103,6 +103,7 @@ struct fileops {
 	int	(*fo_fpathconf)	(struct file *, int, register_t *);
 	int	(*fo_posix_fadvise)
 				(struct file *, off_t, off_t, int);
+	int	(*fo_truncate)	(struct file *, off_t);
 };
 
 union file_data {
