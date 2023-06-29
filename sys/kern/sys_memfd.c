@@ -1,5 +1,6 @@
 #include <sys/param.h>
 #include <sys/types.h>
+#include <sys/fcntl.h>
 #include <sys/file.h>
 #include <sys/filedesc.h>
 #include <sys/mman.h>
@@ -19,23 +20,24 @@ static int memfd_read(file_t *fp, off_t *offp, struct uio *uio,
     kauth_cred_t cred, int flags);
 static int memfd_write(file_t *fp, off_t *offp, struct uio *uio,
     kauth_cred_t cred, int flags);
+static int memfd_ioctl(file_t *fp, u_long cmd, void *data);
 static int memfd_fcntl(file_t *fp, u_int cmd, void *data);
+static int memfd_stat(file_t *fp, struct stat *st);
 static int memfd_close(file_t *fp);
-static int memfd_mmap(struct file *fp, off_t *offp, size_t size, int prot,
+static int memfd_mmap(file_t *fp, off_t *offp, size_t size, int prot,
     int *flagsp, int *advicep, struct uvm_object **uobjp, int *maxprotp);
-static int memfd_seek(struct file *fp, off_t delta, int whence,
+static int memfd_seek(file_t *fp, off_t delta, int whence,
     off_t *newoffp, int flags);
-
-static int do_memfd_truncate(struct memfd *mfd, off_t newsize);
+static int memfd_truncate(file_t *fp, off_t length);
 
 static const struct fileops memfd_fileops = {
 	.fo_name = "memfd",
 	.fo_read = memfd_read,
 	.fo_write = memfd_write,
-	.fo_ioctl = (void *)eopnotsupp, // GTODO
+	.fo_ioctl = memfd_ioctl,
 	.fo_fcntl = memfd_fcntl,
 	.fo_poll = fnullop_poll,
-	.fo_stat = (void *)eopnotsupp, // GTODO
+	.fo_stat = memfd_stat,
 	.fo_close = memfd_close,
 	.fo_kqfilter = fnullop_kqfilter,
 	.fo_restart = fnullop_restart,
@@ -44,7 +46,7 @@ static const struct fileops memfd_fileops = {
 	.fo_advlock = (void *)eopnotsupp, // GTODO
 	.fo_fpathconf = (void *)eopnotsupp, // GTODO
 	.fo_posix_fadvise = (void *)eopnotsupp, // GTODO
-	// GTODO .fo_truncate
+	.fo_truncate = memfd_truncate,
 };
 
 int
@@ -153,7 +155,7 @@ memfd_write(file_t *fp, off_t *offp, struct uio *uio, kauth_cred_t cred,
 
 	/* Grow to accommodate the write request. */
 	if (*offp + uio->uio_resid >= mfd->mfd_size) {
-		error = do_memfd_truncate(mfd, *offp + uio->uio_resid);
+		error = memfd_truncate(fp, *offp + uio->uio_resid);
 		if (error != 0)
 			goto leave;
 	}
@@ -168,6 +170,12 @@ leave:
 		mutex_exit(&fp->f_lock);
 	
 	return error;
+}
+
+static int
+memfd_ioctl(file_t *fp, u_long cmd, void *data)
+{
+        return EINVAL;
 }
 
 static int
@@ -193,22 +201,56 @@ memfd_fcntl(file_t *fp, u_int cmd, void *data)
 }
 
 static int
+memfd_stat(file_t *fp, struct stat *st)
+{
+	struct memfd *mfd = fp->f_memfd;
+
+	memset(st, 0, sizeof(*st));
+//GTODO	st->st_mode = ;
+	st->st_uid = kauth_cred_geteuid(fp->f_cred);
+	st->st_gid = kauth_cred_getegid(fp->f_cred);
+	st->st_size = mfd->mfd_size;
+
+	return 0;
+}
+
+static int
 memfd_close(file_t *fp)	// GTODO
 {
 	return 0;
 }
 
 static int
-memfd_mmap(struct file *fp, off_t *offp, size_t size, int prot, int *flagsp,
+memfd_mmap(file_t *fp, off_t *offp, size_t size, int prot, int *flagsp,
     int *advicep, struct uvm_object **uobjp, int *maxprotp)
 {
-	*uobjp = fp->f_memfd->mfd_uobj;
+	struct memfd *mfd = fp->f_memfd;
+
+	/* uvm_mmap guarantees page-aligned offset and size.  */
+	KASSERT(*offp == round_page(*offp));
+	KASSERT(size == round_page(size));
+	KASSERT(size > 0);
+
+	if ((mfd->mfd_seals & (F_SEAL_WRITE|F_SEAL_FUTURE_WRITE)) &&
+	    (prot & VM_PROT_WRITE) && (*flagsp & MAP_PRIVATE) == 0)
+		return EPERM;
+
+	if (*offp < 0)
+		return EINVAL;
+	if (*offp + size > mfd->mfd_size)
+		return EINVAL;
+
 	uao_reference(fp->f_memfd->mfd_uobj);
+	*uobjp = fp->f_memfd->mfd_uobj;
+
+	*maxprotp = prot;
+	*advicep = UVM_ADV_RANDOM;
+
 	return 0;
 }
 
 static int
-memfd_seek(struct file *fp, off_t delta, int whence, off_t *newoffp,
+memfd_seek(file_t *fp, off_t delta, int whence, off_t *newoffp,
     int flags)
 {
 	off_t newoff;
@@ -216,13 +258,11 @@ memfd_seek(struct file *fp, off_t delta, int whence, off_t *newoffp,
 
 	switch (whence) {
 	case SEEK_CUR:
-		// GTODO
-		newoff = delta;
+		newoff = fp->f_offset + delta;
 		break;
 
 	case SEEK_END:
-		// GTODO
-		newoff = delta;
+		newoff = fp->f_memfd->mfd_size + delta;
 		break;
 
 	case SEEK_SET:
@@ -243,21 +283,23 @@ memfd_seek(struct file *fp, off_t delta, int whence, off_t *newoffp,
 }
 
 static int
-do_memfd_truncate(struct memfd *mfd, off_t newsize)
+memfd_truncate(file_t *fp, off_t length)
 {
-	if ((mfd->mfd_seals & F_SEAL_SHRINK) && newsize < mfd->mfd_size)
+	struct memfd *mfd = fp->f_memfd;
+
+	if ((mfd->mfd_seals & F_SEAL_SHRINK) && length < mfd->mfd_size)
 		return EPERM;
-	if ((mfd->mfd_seals & F_SEAL_GROW) && newsize > mfd->mfd_size)
+	if ((mfd->mfd_seals & F_SEAL_GROW) && length > mfd->mfd_size)
 		return EPERM;
 
-	if (newsize < 0)
+	if (length < 0)
 		return EINVAL;
 
-	if (newsize > mfd->mfd_size) {
+	if (length > mfd->mfd_size) {
 		ubc_zerorange(mfd->mfd_uobj, mfd->mfd_size,
-		    newsize - mfd->mfd_size, 0);
+		    length - mfd->mfd_size, 0);
 	}
 
-	mfd->mfd_size = newsize;
+	mfd->mfd_size = length;
 	return 0;
 }
