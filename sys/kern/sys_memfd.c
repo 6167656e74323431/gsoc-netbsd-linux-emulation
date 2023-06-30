@@ -9,8 +9,6 @@
 
 struct memfd {
 	char			mfd_name[256];
-//	uint64_t		mfd_refcnt;
-//	kmutex_t 		mfd_lock; GTODO for close
 	struct uvm_object	*mfd_uobj;
 	size_t			mfd_size;
 	int			mfd_seals;
@@ -230,8 +228,15 @@ memfd_stat(file_t *fp, struct stat *st)
 }
 
 static int
-memfd_close(file_t *fp)	// GTODO
+memfd_close(file_t *fp)
 {
+	struct memfd *mfd = fp->f_memfd;
+
+	uao_detach(mfd->mfd_uobj);
+
+	kmem_free(mfd, sizeof(*mfd));
+	fp->f_memfd = NULL;
+
 	return 0;
 }
 
