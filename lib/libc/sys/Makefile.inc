@@ -134,10 +134,10 @@ ASM=\
 		_lwp_unpark_all.S _lwp_suspend.S _lwp_continue.S \
 		_lwp_wakeup.S _lwp_detach.S _lwp_setprivate.S \
 		_lwp_setname.S _lwp_getname.S _lwp_ctl.S \
-	madvise.S mincore.S minherit.S mkdir.S mkdirat.S mkfifo.S mkfifoat.S \
-		__mknod50.S mlock.S mlockall.S modctl.S __mount50.S \
-		mprotect.S __msgctl50.S msgget.S munlock.S munlockall.S \
-		munmap.S \
+	madvise.S memfd_create.S mincore.S minherit.S mkdir.S mkdirat.S \
+		mkfifo.S mkfifoat.S __mknod50.S mlock.S mlockall.S modctl.S \
+		__mount50.S mprotect.S __msgctl50.S msgget.S munlock.S \
+		munlockall.S munmap.S \
 	nfssvc.S __ntp_gettime50.S \
 	pathconf.S pipe2.S \
 		__posix_chown.S __posix_fchown.S __posix_lchown.S \

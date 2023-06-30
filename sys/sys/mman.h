@@ -212,13 +212,13 @@ typedef	__off_t		off_t;		/* file offset */
 					   implemented in UVM */
 #define	MAP_INHERIT_ZERO	4	/* zero in child */
 #define	MAP_INHERIT_DEFAULT	MAP_INHERIT_COPY
-#endif
 
 /*
  * Flags to memfd_create
  */
 #define MFD_CLOEXEC		0x1U
 #define MFD_ALLOW_SEALING	0x2U
+#endif /* _NETBSD_SOURCE */
 
 #ifndef _KERNEL
 
@@ -240,11 +240,11 @@ int	madvise(void *, size_t, int);
 int	mincore(void *, size_t, char *);
 int	minherit(void *, size_t, int);
 void *	mremap(void *, size_t, void *, size_t, int);
+int	memfd_create(const char *, unsigned int);
 #endif
 int	posix_madvise(void *, size_t, int);
 int	shm_open(const char *, int, mode_t);
 int	shm_unlink(const char *);
-int	memfd_create(const char *, unsigned int);
 __END_DECLS
 
 #endif /* !_KERNEL */
