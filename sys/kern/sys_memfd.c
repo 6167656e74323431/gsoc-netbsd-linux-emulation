@@ -16,6 +16,7 @@ struct memfd {
 	struct uvm_object	*mfd_uobj;
 	size_t			mfd_size;
 	int			mfd_seals;
+	kmutex_t		mfd_lock;	/* for truncate */
 
 	struct timespec		mfd_btime;
 	struct timespec		mfd_atime;
@@ -79,6 +80,7 @@ sys_memfd_create(struct lwp *l, const struct sys_memfd_create_args *uap,
 	mfd = kmem_zalloc(sizeof(*mfd), KM_SLEEP);
 	mfd->mfd_size = 0;
 	mfd->mfd_uobj = uao_create(INT64_MAX - PAGE_SIZE, 0); /* same as tmpfs */
+	mutex_init(&mfd->mfd_lock, MUTEX_DEFAULT, IPL_NONE);
 
 	strcpy(mfd->mfd_name, "memfd:");
 	error = copyinstr(SCARG(uap, name), &mfd->mfd_name[6], 249, &done);
@@ -267,6 +269,7 @@ memfd_close(file_t *fp)
 	struct memfd *mfd = fp->f_memfd;
 
 	uao_detach(mfd->mfd_uobj);
+	mutex_destroy(&mfd->mfd_lock);
 
 	kmem_free(mfd, sizeof(*mfd));
 	fp->f_memfd = NULL;
@@ -353,7 +356,7 @@ memfd_truncate(file_t *fp, off_t length)
 	if (length == mfd->mfd_size)
 		return 0;
 
-	mutex_enter(&fp->f_lock);
+	mutex_enter(&mfd->mfd_lock);
 
 	if (length > mfd->mfd_size)
 		ubc_zerorange(mfd->mfd_uobj, mfd->mfd_size,
@@ -373,6 +376,6 @@ memfd_truncate(file_t *fp, off_t length)
 
 	getnanotime(&mfd->mfd_mtime);
 	mfd->mfd_size = length;
-	mutex_exit(&fp->f_lock);
+	mutex_exit(&mfd->mfd_lock);
 	return error;
 }
