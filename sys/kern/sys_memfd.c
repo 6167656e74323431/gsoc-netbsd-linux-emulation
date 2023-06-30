@@ -160,24 +160,34 @@ memfd_write(file_t *fp, off_t *offp, struct uio *uio, kauth_cred_t cred,
 		goto leave;
 	}
 
-	/* Grow to accommodate the write request. */
-	if (*offp + uio->uio_resid >= mfd->mfd_size) {
+	uio->uio_offset = *offp;
+	todo = uio->uio_resid;
+
+	if (mfd->mfd_seals & F_SEAL_GROW) {
+		if (*offp >= mfd->mfd_size) {
+			error = EPERM;
+			goto leave;
+		}
+
+		/* Truncate the write to fit in mfd_size */
+		if (*offp + uio->uio_resid >= mfd->mfd_size)
+			todo = mfd->mfd_size - *offp;
+	} else if (*offp + uio->uio_resid >= mfd->mfd_size) {
+		/* Grow to accommodate the write request. */
 		error = memfd_truncate(fp, *offp + uio->uio_resid);
 		if (error != 0)
 			goto leave;
 	}
 
-	uio->uio_offset = *offp;
-	todo = uio->uio_resid; // GTODO seals...
 	error = ubc_uiomove(mfd->mfd_uobj, uio, todo, UVM_ADV_SEQUENTIAL,
 	    UBC_WRITE|UBC_PARTIALOK);
+
+	getnanotime(&mfd->mfd_mtime);
 
 leave:
 	if (offp == &fp->f_offset)
 		mutex_exit(&fp->f_lock);
 
-	getnanotime(&mfd->mfd_mtime);
-	
 	return error;
 }
 
@@ -215,10 +225,13 @@ memfd_stat(file_t *fp, struct stat *st)
 	struct memfd *mfd = fp->f_memfd;
 
 	memset(st, 0, sizeof(*st));
-//GTODO	st->st_mode = ;
 	st->st_uid = kauth_cred_geteuid(fp->f_cred);
 	st->st_gid = kauth_cred_getegid(fp->f_cred);
 	st->st_size = mfd->mfd_size;
+
+	st->st_mode = S_IREAD;
+	if ((mfd->mfd_seals & (F_SEAL_WRITE|F_SEAL_FUTURE_WRITE)) == 0)
+		st->st_mode |= S_IWRITE;
 
 	st->st_birthtimespec = mfd->mfd_btime;
 	st->st_ctimespec = mfd->mfd_btime;
@@ -338,6 +351,7 @@ memfd_truncate(file_t *fp, off_t length)
 		}
 	}
 
+	getnanotime(&mfd->mfd_mtime);
 	mfd->mfd_size = length;
 	mutex_exit(&fp->f_lock);
 	return error;
