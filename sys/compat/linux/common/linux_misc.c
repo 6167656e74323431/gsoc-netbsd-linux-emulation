@@ -1769,10 +1769,12 @@ linux_sys_eventfd2(struct lwp *l, const struct linux_sys_eventfd2_args *uap,
 #define LINUX_MFD_CLOEXEC	0x0001U
 #define LINUX_MFD_ALLOW_SEALING	0x0002U
 #define LINUX_MFD_HUGETLB	0x0004U
-#define LINUX_MFD_NOEXEC_SEAL	0x0008U
-#define LINUX_MFD_EXEC		0x0010U
-#define LINUX_MFD_HUGE_MASK	0x3f
+#define LINUX_MFD_KNOWN_FLAGS	(LINUX_MFD_CLOEXEC|LINUX_MFD_ALLOW_SEALING)
 
+/*
+ * memfd_create(2).  Do some error checking and then call NetBSD's
+ * version.
+ */
 int
 linux_sys_memfd_create(struct lwp *l, const struct linux_sys_memfd_create_args *uap,
     register_t *retval)
@@ -1787,16 +1789,12 @@ linux_sys_memfd_create(struct lwp *l, const struct linux_sys_memfd_create_args *
 	if ((lflags & LINUX_MFD_HUGETLB) && (lflags & LINUX_MFD_ALLOW_SEALING))
 		return EINVAL;
 
-	if (lflags & LINUX_MFD_HUGETLB)
-		DPRINTF(("linux_sys_memfd_create: ignored set flag MFD_HUGETLB flags=%x\n",
-		    lflags));
+	if (lflags & ~LINUX_MFD_KNOWN_FLAGS)
+		DPRINTF(("linux_sys_memfd_create: ignored flags %x\n",
+		    lflags & ~LINUX_MFD_KNOWN_FLAGS));
 
 	SCARG(&muap, name) = SCARG(uap, name);
-
-	/* Except for LINUX_MFD_HUGETLB, NetBSD's MFD_ flags are the
-	   same as Linux's.. */
-	SCARG(&muap, flags) = lflags & LINUX_MFD_HUGE_MASK;
-	SCARG(&muap, flags) &= ~LINUX_MFD_HUGETLB;
+	SCARG(&muap, flags) = lflags & LINUX_MFD_KNOWN_FLAGS;
 
 	return sys_memfd_create(l, &muap, retval);
 }

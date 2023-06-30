@@ -219,9 +219,6 @@ typedef	__off_t		off_t;		/* file offset */
  */
 #define MFD_CLOEXEC		0x1U
 #define MFD_ALLOW_SEALING	0x2U
-// GTODO these two
-#define MFD_NOEXEC_SEAL		0x8U
-#define MFD_EXEC		0x10U
 
 #ifndef _KERNEL
 

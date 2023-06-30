@@ -9,6 +9,8 @@
 #include <uvm/uvm_extern.h>
 #include <uvm/uvm_object.h>
 
+#define F_SEAL_ANY_WRITE (F_SEAL_WRITE|F_SEAL_FUTURE_WRITE)
+
 struct memfd {
 	char			mfd_name[256];
 	struct uvm_object	*mfd_uobj;
@@ -149,7 +151,7 @@ memfd_write(file_t *fp, off_t *offp, struct uio *uio, kauth_cred_t cred,
 	vsize_t todo;
 	struct memfd *mfd = fp->f_memfd;
 
-	if (mfd->mfd_seals & (F_SEAL_WRITE|F_SEAL_FUTURE_WRITE))
+	if (mfd->mfd_seals & F_SEAL_ANY_WRITE)
 		return EPERM;
 
 	if (offp == &fp->f_offset)
@@ -230,7 +232,7 @@ memfd_stat(file_t *fp, struct stat *st)
 	st->st_size = mfd->mfd_size;
 
 	st->st_mode = S_IREAD;
-	if ((mfd->mfd_seals & (F_SEAL_WRITE|F_SEAL_FUTURE_WRITE)) == 0)
+	if ((mfd->mfd_seals & F_SEAL_ANY_WRITE) == 0)
 		st->st_mode |= S_IWRITE;
 
 	st->st_birthtimespec = mfd->mfd_btime;
@@ -265,7 +267,7 @@ memfd_mmap(file_t *fp, off_t *offp, size_t size, int prot, int *flagsp,
 	KASSERT(size == round_page(size));
 	KASSERT(size > 0);
 
-	if ((mfd->mfd_seals & (F_SEAL_WRITE|F_SEAL_FUTURE_WRITE)) &&
+	if ((mfd->mfd_seals & F_SEAL_ANY_WRITE) &&
 	    (prot & VM_PROT_WRITE) && (*flagsp & MAP_PRIVATE) == 0)
 		return EPERM;
 
