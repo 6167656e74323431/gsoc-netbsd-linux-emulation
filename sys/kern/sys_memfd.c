@@ -54,6 +54,10 @@ static const struct fileops memfd_fileops = {
 	.fo_truncate = memfd_truncate,
 };
 
+/*
+ * memfd_create(2).  Creat a file descriptor associated with anonymous
+ * memory.
+ */
 int
 sys_memfd_create(struct lwp *l, const struct sys_memfd_create_args *uap,
     register_t *retval)
@@ -69,16 +73,18 @@ sys_memfd_create(struct lwp *l, const struct sys_memfd_create_args *uap,
 	struct proc *p = l->l_proc;
 	const unsigned int flags = SCARG(uap, flags);
 
+	if (flags & !(MFD_CLOEXEC|MFD_ALLOW_SEALING))
+		return EINVAL;
+
 	mfd = kmem_zalloc(sizeof(*mfd), KM_SLEEP);
 	mfd->mfd_size = 0;
 	mfd->mfd_uobj = uao_create(INT64_MAX - PAGE_SIZE, 0); /* same as tmpfs */
 
 	strcpy(mfd->mfd_name, "memfd:");
-	error = copyinstr(SCARG(uap, name), &mfd->mfd_name[6], 250, &done);
-	if (error != 0)
-		goto leave;
-	if (done > 249) {
-		error = EINVAL;
+	error = copyinstr(SCARG(uap, name), &mfd->mfd_name[6], 249, &done);
+	if (error != 0) {
+		if (error == ENAMETOOLONG)
+			error = EINVAL;
 		goto leave;
 	}
 
@@ -208,6 +214,18 @@ memfd_fcntl(file_t *fp, u_int cmd, void *data)
 	case F_ADD_SEALS:
 		if (mfd->mfd_seals & F_SEAL_SEAL)
 			return EPERM;
+
+		/*
+		 * Can only add F_SEAL_WRITE if there are no currently
+		 * open mmaps.
+		 *
+		 * XXX should only disallow if there are no currently
+		 * open mmaps with PROT_WRITE.
+		 */
+		if ((mfd->mfd_seals & F_SEAL_WRITE) == 0 &&
+		    (*(int *)data & F_SEAL_WRITE) != 0 &&
+		    mfd->mfd_uobj->uo_refs > 1)
+			return EBUSY;
 
 	        mfd->mfd_seals |= *(int *)data;
 		return 0;

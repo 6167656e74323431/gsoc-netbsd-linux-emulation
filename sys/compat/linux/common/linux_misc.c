@@ -1769,6 +1769,13 @@ linux_sys_eventfd2(struct lwp *l, const struct linux_sys_eventfd2_args *uap,
 #define LINUX_MFD_CLOEXEC	0x0001U
 #define LINUX_MFD_ALLOW_SEALING	0x0002U
 #define LINUX_MFD_HUGETLB	0x0004U
+#define LINUX_MFD_NOEXEC_SEAL	0x0008U
+#define LINUX_MFD_EXEC		0x0010U
+#define LINUX_MFD_HUGE_FLAGS	(0x3f << 26)
+
+#define LINUX_MFD_ALL_FLAGS	(LINUX_MFD_CLOEXEC|LINUX_MFD_ALLOW_SEALING \
+				|LINUX_MFD_HUGETLB|LINUX_MFD_NOEXEC_SEAL \
+				|LINUX_MFD_EXEC|LINUX_MFD_HUGE_FLAGS)
 #define LINUX_MFD_KNOWN_FLAGS	(LINUX_MFD_CLOEXEC|LINUX_MFD_ALLOW_SEALING)
 
 /*
@@ -1786,6 +1793,11 @@ linux_sys_memfd_create(struct lwp *l, const struct linux_sys_memfd_create_args *
 	struct sys_memfd_create_args muap;
 	const unsigned int lflags = SCARG(uap, flags);
 
+	if (lflags & ~LINUX_MFD_ALL_FLAGS)
+		return EINVAL;
+	if ((lflags & LINUX_MFD_HUGE_FLAGS) != 0 &&
+	    (lflags & LINUX_MFD_HUGETLB) == 0)
+		return EINVAL;
 	if ((lflags & LINUX_MFD_HUGETLB) && (lflags & LINUX_MFD_ALLOW_SEALING))
 		return EINVAL;
 
