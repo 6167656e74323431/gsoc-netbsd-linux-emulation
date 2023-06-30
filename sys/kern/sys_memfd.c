@@ -5,7 +5,9 @@
 #include <sys/filedesc.h>
 #include <sys/mman.h>
 #include <sys/syscallargs.h>
+
 #include <uvm/uvm_extern.h>
+#include <uvm/uvm_object.h>
 
 struct memfd {
 	char			mfd_name[256];
@@ -45,9 +47,8 @@ static const struct fileops memfd_fileops = {
 	.fo_restart = fnullop_restart,
 	.fo_mmap = memfd_mmap,
 	.fo_seek = memfd_seek,
-	.fo_advlock = (void *)eopnotsupp, // GTODO
-	.fo_fpathconf = (void *)eopnotsupp, // GTODO
-	.fo_posix_fadvise = (void *)eopnotsupp, // GTODO
+	.fo_fpathconf = (void *)eopnotsupp,
+	.fo_posix_fadvise = (void *)eopnotsupp,
 	.fo_truncate = memfd_truncate,
 };
 
@@ -306,6 +307,8 @@ static int
 memfd_truncate(file_t *fp, off_t length)
 {
 	struct memfd *mfd = fp->f_memfd;
+	int error = 0;
+	voff_t start, end;
 
 	if ((mfd->mfd_seals & F_SEAL_SHRINK) && length < mfd->mfd_size)
 		return EPERM;
@@ -314,12 +317,28 @@ memfd_truncate(file_t *fp, off_t length)
 
 	if (length < 0)
 		return EINVAL;
+	if (length == mfd->mfd_size)
+		return 0;
 
-	if (length > mfd->mfd_size) {
+	mutex_enter(&fp->f_lock);
+
+	if (length > mfd->mfd_size)
 		ubc_zerorange(mfd->mfd_uobj, mfd->mfd_size,
 		    length - mfd->mfd_size, 0);
+	else {
+		/* length < mfd->mfd_size, so try to get rid of excess pages. */
+		start = round_page(length);
+		end = round_page(mfd->mfd_size);
+
+		if (start < end) { /* we actually have pages to remove */
+			rw_enter(mfd->mfd_uobj->vmobjlock, RW_WRITER);
+			error = (*mfd->mfd_uobj->pgops->pgo_put)(mfd->mfd_uobj,
+			    start, end, PGO_FREE);
+			/* pgo_put drops vmobjlock */
+		}
 	}
 
 	mfd->mfd_size = length;
-	return 0;
+	mutex_exit(&fp->f_lock);
+	return error;
 }
