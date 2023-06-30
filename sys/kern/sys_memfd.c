@@ -13,7 +13,11 @@ struct memfd {
 //	kmutex_t 		mfd_lock; GTODO for close
 	struct uvm_object	*mfd_uobj;
 	size_t			mfd_size;
-	int		        mfd_seals;
+	int			mfd_seals;
+
+	struct timespec		mfd_btime;
+	struct timespec		mfd_atime;
+	struct timespec		mfd_mtime;
 };
 
 static int memfd_read(file_t *fp, off_t *offp, struct uio *uio,
@@ -77,6 +81,8 @@ sys_memfd_create(struct lwp *l, const struct sys_memfd_create_args *uap,
 		goto leave;
 	}
 
+	getnanotime(&mfd->mfd_btime);
+
 	if ((flags & MFD_ALLOW_SEALING) == 0)
 		mfd->mfd_seals |= F_SEAL_SEAL;
 
@@ -130,6 +136,8 @@ memfd_read(file_t *fp, off_t *offp, struct uio *uio, kauth_cred_t cred,
 leave:
 	if (offp == &fp->f_offset)
 		mutex_exit(&fp->f_lock);
+
+	getnanotime(&mfd->mfd_atime);
 	
 	return error;
 }
@@ -168,6 +176,8 @@ memfd_write(file_t *fp, off_t *offp, struct uio *uio, kauth_cred_t cred,
 leave:
 	if (offp == &fp->f_offset)
 		mutex_exit(&fp->f_lock);
+
+	getnanotime(&mfd->mfd_mtime);
 	
 	return error;
 }
@@ -210,6 +220,11 @@ memfd_stat(file_t *fp, struct stat *st)
 	st->st_uid = kauth_cred_geteuid(fp->f_cred);
 	st->st_gid = kauth_cred_getegid(fp->f_cred);
 	st->st_size = mfd->mfd_size;
+
+	st->st_birthtimespec = mfd->mfd_btime;
+	st->st_ctimespec = mfd->mfd_btime;
+	st->st_atimespec = mfd->mfd_atime;
+	st->st_mtimespec = mfd->mfd_mtime;
 
 	return 0;
 }
