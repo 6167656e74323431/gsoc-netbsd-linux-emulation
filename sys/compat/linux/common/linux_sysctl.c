@@ -57,8 +57,8 @@ __KERNEL_RCSID(0, "$NetBSD: linux_sysctl.c,v 1.47 2021/09/23 06:56:27 ryo Exp $"
 #include <compat/linux/common/linux_machdep.h>
 
 char linux_sysname[128] = "Linux";
-char linux_release[128] = "3.11.6";
-char linux_version[128] = "#1 SMP PREEMPT Thu Oct 24 16:23:02 UTC 2013";
+char linux_release[128] = "6.3.10";
+char linux_version[128] = "#1 SMP PREEMPT_DYNAMIC Wed Jun 28 18:34:30 UTC 2023";
 
 struct sysctlnode linux_sysctl_root = {
 	.sysctl_flags = SYSCTL_VERSION|
