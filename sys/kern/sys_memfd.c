@@ -11,20 +11,7 @@
 
 #define F_SEAL_ANY_WRITE (F_SEAL_WRITE|F_SEAL_FUTURE_WRITE)
 
-#define MFD_NAME_MAX	249
 static const char memfd_prefix[] = "memfd:";
-
-struct memfd {
-	char			mfd_name[MFD_NAME_MAX+sizeof(memfd_prefix)+1];
-	struct uvm_object	*mfd_uobj;
-	size_t			mfd_size;
-	int			mfd_seals;
-	kmutex_t		mfd_lock;	/* for truncate */
-
-	struct timespec		mfd_btime;
-	struct timespec		mfd_atime;
-	struct timespec		mfd_mtime;
-};
 
 static int memfd_read(file_t *fp, off_t *offp, struct uio *uio,
     kauth_cred_t cred, int flags);
@@ -76,6 +63,8 @@ sys_memfd_create(struct lwp *l, const struct sys_memfd_create_args *uap,
 	struct proc *p = l->l_proc;
 	const unsigned int flags = SCARG(uap, flags);
 
+	KASSERT(MFD_NAME_MAX - sizeof(memfd_prefix) > 0); /* sanity check */
+
 	if (flags & ~(MFD_CLOEXEC|MFD_ALLOW_SEALING))
 		return EINVAL;
 
@@ -85,7 +74,7 @@ sys_memfd_create(struct lwp *l, const struct sys_memfd_create_args *uap,
 	mutex_init(&mfd->mfd_lock, MUTEX_DEFAULT, IPL_NONE);
 
 	strcpy(mfd->mfd_name, memfd_prefix);
-	error = copyinstr(SCARG(uap, name), &mfd->mfd_name[sizeof(memfd_prefix)],
+	error = copyinstr(SCARG(uap, name), &mfd->mfd_name[sizeof(memfd_prefix)-1],
 	    sizeof(mfd->mfd_name) - sizeof(memfd_prefix), NULL);
 	if (error != 0) {
 		if (error == ENAMETOOLONG)
