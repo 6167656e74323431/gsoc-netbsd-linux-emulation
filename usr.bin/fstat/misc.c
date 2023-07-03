@@ -269,15 +269,35 @@ p_audio(struct file *f)
 }
 
 static int
+p_memfd_seal(int seen, int all, int target, const char *name)
+{
+	if (all & target)
+		(void)printf("%s%s", (seen ? "|" : ""), name);
+
+	return seen || (all & target);
+}
+
+static int
 p_memfd(struct file *f)
 {
+	int seal_yet = 0;
 	struct memfd mfd;
 
 	if (!KVM_READ(f->f_data, &mfd, sizeof(mfd))) {
 		dprintf("can't read memfd at %p for pid %d", f->f_data, Pid);
 		return 0;
 	}
-	(void)printf("* %s", mfd.mfd_name);
+	(void)printf("* %s, seals=", mfd.mfd_name);
+	if (mfd.mfd_seals == 0)
+		(void)printf("0");
+	else {
+		seal_yet = p_memfd_seal(seal_yet, mfd.mfd_seals, F_SEAL_SEAL, "F_SEAL_SEAL");
+		seal_yet = p_memfd_seal(seal_yet, mfd.mfd_seals, F_SEAL_SHRINK, "F_SEAL_SHRINK");
+		seal_yet = p_memfd_seal(seal_yet, mfd.mfd_seals, F_SEAL_GROW, "F_SEAL_GROW");
+		seal_yet = p_memfd_seal(seal_yet, mfd.mfd_seals, F_SEAL_WRITE, "F_SEAL_WRITE");
+		seal_yet = p_memfd_seal(seal_yet, mfd.mfd_seals, F_SEAL_FUTURE_WRITE, "F_SEAL_FUTURE_WRITE");
+	}
+
 	oprint(f, "\n");
 	return 0;
 }
