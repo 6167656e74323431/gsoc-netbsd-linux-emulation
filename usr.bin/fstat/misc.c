@@ -56,6 +56,9 @@ __RCSID("$NetBSD: misc.c,v 1.24 2020/09/13 04:14:48 isaki Exp $");
 #undef _KERNEL
 #include <sys/cprng.h>
 #include <sys/vnode.h>
+#define _KERNEL
+#include <sys/mman.h>
+#undef _KERNEL
 #include <sys/mount.h>
 
 #include <net/bpfdesc.h>
@@ -110,7 +113,9 @@ static struct nlist nl[] = {
     { .n_name = "audio_fileops" },
 #define NL_PAD		19
     { .n_name = "pad_fileops" },
-#define NL_MAX		20
+#define NL_MEMFD	20
+    { .n_name = "memfd_fileops" },
+#define NL_MAX		21
     { .n_name = NULL }
 };
 
@@ -263,6 +268,20 @@ p_audio(struct file *f)
 	return 0;
 }
 
+static int
+p_memfd(struct file *f)
+{
+	struct memfd mfd;
+
+	if (!KVM_READ(f->f_data, &mfd, sizeof(mfd))) {
+		dprintf("can't read memfd at %p for pid %d", f->f_data, Pid);
+		return 0;
+	}
+	(void)printf("* %s", mfd.mfd_name);
+	oprint(f, "\n");
+	return 0;
+}
+
 int
 pmisc(struct file *f, const char *name)
 {
@@ -310,6 +329,8 @@ pmisc(struct file *f, const char *name)
 	case NL_PAD:
 		printf("* pad %p", f->f_data);
 		break;
+	case NL_MEMFD:
+		return p_memfd(f);
 	case NL_MAX:
 		printf("* %s ops=%p %p", name, f->f_ops, f->f_data);
 		break;
