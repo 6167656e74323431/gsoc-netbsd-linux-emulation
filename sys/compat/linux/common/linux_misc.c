@@ -1801,9 +1801,10 @@ linux_sys_memfd_create(struct lwp *l, const struct linux_sys_memfd_create_args *
 	if ((lflags & LINUX_MFD_HUGETLB) && (lflags & LINUX_MFD_ALLOW_SEALING))
 		return EINVAL;
 
-	if (lflags & ~LINUX_MFD_KNOWN_FLAGS)
+	if (lflags & ~LINUX_MFD_KNOWN_FLAGS) {
 		DPRINTF(("linux_sys_memfd_create: ignored flags %x\n",
 		    lflags & ~LINUX_MFD_KNOWN_FLAGS));
+	}
 
 	SCARG(&muap, name) = SCARG(uap, name);
 	SCARG(&muap, flags) = lflags & LINUX_MFD_KNOWN_FLAGS;
