@@ -295,14 +295,14 @@ memfd_mmap(file_t *fp, off_t *offp, size_t size, int prot, int *flagsp,
 	KASSERT(size == round_page(size));
 	KASSERT(size > 0);
 
-	if ((mfd->mfd_seals & F_SEAL_ANY_WRITE) &&
-	    (prot & VM_PROT_WRITE) && (*flagsp & MAP_PRIVATE) == 0)
-		return EPERM;
-
 	if (*offp < 0)
 		return EINVAL;
 	if (*offp + size > mfd->mfd_size)
 		return EINVAL;
+
+	if ((mfd->mfd_seals & F_SEAL_ANY_WRITE) &&
+	    (prot & VM_PROT_WRITE) && (*flagsp & MAP_PRIVATE) == 0)
+		return EPERM;
 
 	uao_reference(fp->f_memfd->mfd_uobj);
 	*uobjp = fp->f_memfd->mfd_uobj;
@@ -353,15 +353,15 @@ memfd_truncate(file_t *fp, off_t length)
 	int error = 0;
 	voff_t start, end;
 
-	if ((mfd->mfd_seals & F_SEAL_SHRINK) && length < mfd->mfd_size)
-		return EPERM;
-	if ((mfd->mfd_seals & F_SEAL_GROW) && length > mfd->mfd_size)
-		return EPERM;
-
 	if (length < 0)
 		return EINVAL;
 	if (length == mfd->mfd_size)
 		return 0;
+
+	if ((mfd->mfd_seals & F_SEAL_SHRINK) && length < mfd->mfd_size)
+		return EPERM;
+	if ((mfd->mfd_seals & F_SEAL_GROW) && length > mfd->mfd_size)
+		return EPERM;
 
 	mutex_enter(&mfd->mfd_lock);
 
