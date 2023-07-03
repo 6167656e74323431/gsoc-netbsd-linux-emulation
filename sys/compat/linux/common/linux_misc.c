@@ -1778,6 +1778,8 @@ linux_sys_eventfd2(struct lwp *l, const struct linux_sys_eventfd2_args *uap,
 				|LINUX_MFD_EXEC|LINUX_MFD_HUGE_FLAGS)
 #define LINUX_MFD_KNOWN_FLAGS	(LINUX_MFD_CLOEXEC|LINUX_MFD_ALLOW_SEALING)
 
+#define LINUX_MFD_NAME_MAX	249
+
 /*
  * memfd_create(2).  Do some error checking and then call NetBSD's
  * version.
@@ -1790,8 +1792,12 @@ linux_sys_memfd_create(struct lwp *l, const struct linux_sys_memfd_create_args *
 		syscallarg(const char *) name;
 		syscallarg(unsigned int) flags;
 	} */
+	int error;
+	char *pbuf;
 	struct sys_memfd_create_args muap;
 	const unsigned int lflags = SCARG(uap, flags);
+
+	KASSERT(LINUX_MFD_NAME_MAX < NAME_MAX); /* sanity check */
 
 	if (lflags & ~LINUX_MFD_ALL_FLAGS)
 		return EINVAL;
@@ -1801,9 +1807,21 @@ linux_sys_memfd_create(struct lwp *l, const struct linux_sys_memfd_create_args *
 	if ((lflags & LINUX_MFD_HUGETLB) && (lflags & LINUX_MFD_ALLOW_SEALING))
 		return EINVAL;
 
-	if (lflags & ~LINUX_MFD_KNOWN_FLAGS)
+	/* Linux has a stricter limit for name size */
+	pbuf = PNBUF_GET();
+	error = copyinstr(SCARG(uap, name), pbuf, LINUX_MFD_NAME_MAX+1, NULL);
+	PNBUF_PUT(pbuf);
+	pbuf = NULL;
+	if (error != 0) {
+		if (error == ENAMETOOLONG)
+			error = EINVAL;
+		return error;
+	}
+
+	if (lflags & ~LINUX_MFD_KNOWN_FLAGS) {
 		DPRINTF(("linux_sys_memfd_create: ignored flags %x\n",
 		    lflags & ~LINUX_MFD_KNOWN_FLAGS));
+	}
 
 	SCARG(&muap, name) = SCARG(uap, name);
 	SCARG(&muap, flags) = lflags & LINUX_MFD_KNOWN_FLAGS;

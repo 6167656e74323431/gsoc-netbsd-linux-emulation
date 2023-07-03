@@ -63,7 +63,7 @@ sys_memfd_create(struct lwp *l, const struct sys_memfd_create_args *uap,
 	struct proc *p = l->l_proc;
 	const unsigned int flags = SCARG(uap, flags);
 
-	KASSERT(MFD_NAME_MAX - sizeof(memfd_prefix) > 0); /* sanity check */
+	KASSERT(NAME_MAX - sizeof(memfd_prefix) > 0); /* sanity check */
 
 	if (flags & ~(MFD_CLOEXEC|MFD_ALLOW_SEALING))
 		return EINVAL;
