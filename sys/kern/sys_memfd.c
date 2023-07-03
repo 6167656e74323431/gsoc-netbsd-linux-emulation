@@ -263,7 +263,7 @@ memfd_stat(file_t *fp, struct stat *st)
 		st->st_mode |= S_IWRITE;
 
 	st->st_birthtimespec = mfd->mfd_btime;
-	st->st_ctimespec = mfd->mfd_btime;
+	st->st_ctimespec = mfd->mfd_mtime;
 	st->st_atimespec = mfd->mfd_atime;
 	st->st_mtimespec = mfd->mfd_mtime;
 
