@@ -86,7 +86,7 @@ sys_memfd_create(struct lwp *l, const struct sys_memfd_create_args *uap,
 
 	strcpy(mfd->mfd_name, memfd_prefix);
 	error = copyinstr(SCARG(uap, name), &mfd->mfd_name[sizeof(memfd_prefix)],
-	    MFD_NAME_MAX+1, NULL);
+	    sizeof(mfd->mfd_name) - sizeof(memfd_prefix), NULL);
 	if (error != 0) {
 		if (error == ENAMETOOLONG)
 			error = EINVAL;
