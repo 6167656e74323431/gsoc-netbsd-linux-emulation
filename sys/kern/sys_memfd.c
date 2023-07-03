@@ -11,8 +11,11 @@
 
 #define F_SEAL_ANY_WRITE (F_SEAL_WRITE|F_SEAL_FUTURE_WRITE)
 
+#define MFD_NAME_MAX	249
+static const char memfd_prefix[] = "memfd:";
+
 struct memfd {
-	char			mfd_name[256];
+	char			mfd_name[MFD_NAME_MAX+sizeof(memfd_prefix)+1];
 	struct uvm_object	*mfd_uobj;
 	size_t			mfd_size;
 	int			mfd_seals;
@@ -69,7 +72,6 @@ sys_memfd_create(struct lwp *l, const struct sys_memfd_create_args *uap,
 	} */
 	int error, fd;
 	file_t *fp;
-	size_t done;
 	struct memfd *mfd;
 	struct proc *p = l->l_proc;
 	const unsigned int flags = SCARG(uap, flags);
@@ -82,8 +84,9 @@ sys_memfd_create(struct lwp *l, const struct sys_memfd_create_args *uap,
 	mfd->mfd_uobj = uao_create(INT64_MAX - PAGE_SIZE, 0); /* same as tmpfs */
 	mutex_init(&mfd->mfd_lock, MUTEX_DEFAULT, IPL_NONE);
 
-	strcpy(mfd->mfd_name, "memfd:");
-	error = copyinstr(SCARG(uap, name), &mfd->mfd_name[6], 249, &done);
+	strcpy(mfd->mfd_name, memfd_prefix);
+	error = copyinstr(SCARG(uap, name), &mfd->mfd_name[sizeof(memfd_prefix)],
+	    MFD_NAME_MAX+1, NULL);
 	if (error != 0) {
 		if (error == ENAMETOOLONG)
 			error = EINVAL;
