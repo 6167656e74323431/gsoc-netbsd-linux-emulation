@@ -76,7 +76,7 @@ sys_memfd_create(struct lwp *l, const struct sys_memfd_create_args *uap,
 	struct proc *p = l->l_proc;
 	const unsigned int flags = SCARG(uap, flags);
 
-	if (flags & !(MFD_CLOEXEC|MFD_ALLOW_SEALING))
+	if (flags & ~(MFD_CLOEXEC|MFD_ALLOW_SEALING))
 		return EINVAL;
 
 	mfd = kmem_zalloc(sizeof(*mfd), KM_SLEEP);
