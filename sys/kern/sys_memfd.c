@@ -216,6 +216,10 @@ memfd_fcntl(file_t *fp, u_int cmd, void *data)
 	struct memfd *mfd = fp->f_memfd;
 
 	switch (cmd) {
+	case F_GETPATH:
+		strncpy(data, mfd->mfd_name, MAXPATHLEN);
+		return 0;
+
 	case F_ADD_SEALS:
 		if (mfd->mfd_seals & F_SEAL_SEAL)
 			return EPERM;
