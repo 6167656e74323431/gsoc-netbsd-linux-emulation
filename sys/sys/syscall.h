@@ -1407,6 +1407,9 @@
 /* syscall: "__kevent100" ret: "int" args: "int" "const struct kevent *" "size_t" "struct kevent *" "size_t" "const struct timespec *" */
 #define	SYS___kevent100	500
 
-#define	SYS_MAXSYSCALL	501
+/* syscall: "memfd_create" ret: "int" args: "const char *" "unsigned int" */
+#define	SYS_memfd_create	501
+
+#define	SYS_MAXSYSCALL	502
 #define	SYS_NSYSENT	512
 #endif /* _SYS_SYSCALL_H_ */

@@ -551,7 +551,7 @@ const char *const syscallnames[] = {
 	/* 498 */	"__acl_aclcheck_fd",
 	/* 499 */	"lpathconf",
 	/* 500 */	"__kevent100",
-	/* 501 */	"# filler",
+	/* 501 */	"memfd_create",
 	/* 502 */	"# filler",
 	/* 503 */	"# filler",
 	/* 504 */	"# filler",
@@ -1088,7 +1088,7 @@ const char *const altsyscallnames[] = {
 	/* 498 */	NULL, /* __acl_aclcheck_fd */
 	/* 499 */	NULL, /* lpathconf */
 	/* 500 */	"kevent",
-	/* 501 */	NULL, /* filler */
+	/* 501 */	NULL, /* memfd_create */
 	/* 502 */	NULL, /* filler */
 	/* 503 */	NULL, /* filler */
 	/* 504 */	NULL, /* filler */

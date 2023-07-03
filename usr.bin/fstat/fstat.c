@@ -548,6 +548,7 @@ ftrans(fdfile_t *fp, int i)
 	case DTYPE_CRYPTO:
 	case DTYPE_MQUEUE:
 	case DTYPE_SEM:
+	case DTYPE_MEMFD:
 		if (checkfile == 0)
 			misctrans(&file, i);
 		break;

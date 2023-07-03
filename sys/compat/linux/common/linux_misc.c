@@ -1765,3 +1765,48 @@ linux_sys_eventfd2(struct lwp *l, const struct linux_sys_eventfd2_args *uap,
 	return linux_do_eventfd2(l, SCARG(uap, initval), SCARG(uap, flags),
 				 retval);
 }
+
+#define LINUX_MFD_CLOEXEC	0x0001U
+#define LINUX_MFD_ALLOW_SEALING	0x0002U
+#define LINUX_MFD_HUGETLB	0x0004U
+#define LINUX_MFD_NOEXEC_SEAL	0x0008U
+#define LINUX_MFD_EXEC		0x0010U
+#define LINUX_MFD_HUGE_FLAGS	(0x3f << 26)
+
+#define LINUX_MFD_ALL_FLAGS	(LINUX_MFD_CLOEXEC|LINUX_MFD_ALLOW_SEALING \
+				|LINUX_MFD_HUGETLB|LINUX_MFD_NOEXEC_SEAL \
+				|LINUX_MFD_EXEC|LINUX_MFD_HUGE_FLAGS)
+#define LINUX_MFD_KNOWN_FLAGS	(LINUX_MFD_CLOEXEC|LINUX_MFD_ALLOW_SEALING)
+
+/*
+ * memfd_create(2).  Do some error checking and then call NetBSD's
+ * version.
+ */
+int
+linux_sys_memfd_create(struct lwp *l, const struct linux_sys_memfd_create_args *uap,
+    register_t *retval)
+{
+	/* {
+		syscallarg(const char *) name;
+		syscallarg(unsigned int) flags;
+	} */
+	struct sys_memfd_create_args muap;
+	const unsigned int lflags = SCARG(uap, flags);
+
+	if (lflags & ~LINUX_MFD_ALL_FLAGS)
+		return EINVAL;
+	if ((lflags & LINUX_MFD_HUGE_FLAGS) != 0 &&
+	    (lflags & LINUX_MFD_HUGETLB) == 0)
+		return EINVAL;
+	if ((lflags & LINUX_MFD_HUGETLB) && (lflags & LINUX_MFD_ALLOW_SEALING))
+		return EINVAL;
+
+	if (lflags & ~LINUX_MFD_KNOWN_FLAGS)
+		DPRINTF(("linux_sys_memfd_create: ignored flags %x\n",
+		    lflags & ~LINUX_MFD_KNOWN_FLAGS));
+
+	SCARG(&muap, name) = SCARG(uap, name);
+	SCARG(&muap, flags) = lflags & LINUX_MFD_KNOWN_FLAGS;
+
+	return sys_memfd_create(l, &muap, retval);
+}

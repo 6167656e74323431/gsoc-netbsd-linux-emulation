@@ -1425,8 +1425,10 @@ struct sysent linux_sysent[] = {
 		.sy_call = (sy_call_t *)sys_getrandom
 	},		/* 318 = getrandom */
 	{
-		.sy_call = linux_sys_nosys,
-	},		/* 319 = filler */
+		ns(struct linux_sys_memfd_create_args),
+		.sy_flags = SYCALL_ARG_PTR,
+		.sy_call = (sy_call_t *)linux_sys_memfd_create
+	},		/* 319 = memfd_create */
 	{
 		.sy_call = linux_sys_nosys,
 	},		/* 320 = filler */

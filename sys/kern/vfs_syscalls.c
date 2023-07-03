@@ -4149,34 +4149,19 @@ sys_ftruncate(struct lwp *l, const struct sys_ftruncate_args *uap, register_t *r
 		syscallarg(int) pad;
 		syscallarg(off_t) length;
 	} */
-	struct vattr vattr;
-	struct vnode *vp;
 	file_t *fp;
-	int error;
+	int error, fd = SCARG(uap, fd);
 
-	if (SCARG(uap, length) < 0)
-		return EINVAL;
+	fp = fd_getfile(fd);
+	if (fp == NULL)
+		return EBADF;
+	if (fp->f_ops->fo_truncate == NULL)
+		error = EOPNOTSUPP;
+	else
+		error = (*fp->f_ops->fo_truncate)(fp, SCARG(uap, length));
 
-	/* fd_getvnode() will use the descriptor for us */
-	if ((error = fd_getvnode(SCARG(uap, fd), &fp)) != 0)
-		return (error);
-	if ((fp->f_flag & FWRITE) == 0) {
-		error = EINVAL;
-		goto out;
-	}
-	vp = fp->f_vnode;
-	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
-	if (vp->v_type == VDIR)
-		error = EISDIR;
-	else if ((error = vn_writechk(vp)) == 0) {
-		vattr_null(&vattr);
-		vattr.va_size = SCARG(uap, length);
-		error = VOP_SETATTR(vp, &vattr, fp->f_cred);
-	}
-	VOP_UNLOCK(vp);
- out:
-	fd_putfile(SCARG(uap, fd));
-	return (error);
+	fd_putfile(fd);
+	return error;
 }
 
 /*

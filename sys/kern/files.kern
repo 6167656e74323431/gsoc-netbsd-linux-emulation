@@ -162,6 +162,7 @@ file	kern/sys_eventfd.c		kern
 file	kern/sys_futex.c		kern
 file	kern/sys_generic.c		kern
 file	kern/sys_getrandom.c		kern
+file	kern/sys_memfd.c		kern
 file	kern/sys_module.c		kern
 file	kern/sys_mqueue.c		mqueue
 file	kern/sys_lwp.c			kern

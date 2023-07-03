@@ -3899,6 +3899,14 @@ systrace_args(register_t sysnum, const void *params, uintptr_t *uarg, size_t *n_
 		*n_args = 6;
 		break;
 	}
+	/* sys_memfd_create */
+	case 501: {
+		const struct sys_memfd_create_args *p = params;
+		uarg[0] = (intptr_t) SCARG(p, name); /* const char * */
+		uarg[1] = SCARG(p, flags); /* unsigned int */
+		*n_args = 2;
+		break;
+	}
 	default:
 		*n_args = 0;
 		break;
@@ -10529,6 +10537,19 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			break;
 		};
 		break;
+	/* sys_memfd_create */
+	case 501:
+		switch(ndx) {
+		case 0:
+			p = "const char *";
+			break;
+		case 1:
+			p = "unsigned int";
+			break;
+		default:
+			break;
+		};
+		break;
 	default:
 		break;
 	};
@@ -12733,6 +12754,11 @@ systrace_return_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 		break;
 	/* sys___kevent100 */
 	case 500:
+		if (ndx == 0 || ndx == 1)
+			p = "int";
+		break;
+	/* sys_memfd_create */
+	case 501:
 		if (ndx == 0 || ndx == 1)
 			p = "int";
 		break;
