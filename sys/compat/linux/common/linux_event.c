@@ -52,6 +52,8 @@
 #define LINUX_EPOLL_MAX_EVENTS	(INT_MAX / sizeof(struct linux_epoll_event))
 #define LINUX_EPOLL_MAX_DEPTH	5
 
+#define KNOWN_FDS_SIZE(nfds)	__BITMAP_SIZE(char, (nfds))
+
 #define kext_data	ext[0]
 #define kext_epfd	ext[1]
 #define kext_fd		ext[2]
@@ -73,7 +75,15 @@ struct epoll_edge {
 	int fd;
 };
 
-__BITMAP_TYPE(epoll_seen, char, 1);
+__BITMAP_TYPE(known_fds, char, 1);
+
+struct inotifyfd {
+	int			ifd_kqfd;
+	file_t			*ifd_kqfp;
+
+	size_t			ifd_ndeps;
+	struct known_fds	*ifd_deps;
+};
 
 static int	epoll_to_kevent(int epfd, int fd,
 		    struct linux_epoll_event *l_event, struct kevent *kevent,
@@ -100,9 +110,35 @@ static int	epoll_delete_all_events(register_t *retval, int epfd,
 static int	epoll_recover_watch_tree(struct epoll_edge *edges,
 		    size_t nedges, size_t nfds);
 static int	epoll_dfs(struct epoll_edge *edges, size_t nedges,
-		    struct epoll_seen *seen, size_t nseen, int currfd,
+		    struct known_fds *seen, size_t nseen, int currfd,
 		    int depth);
 static int	epoll_check_loop_and_depth(struct lwp *l, int epfd, int fd);
+
+static int	do_inotify_init(struct lwp *l, register_t *retval, int flags);
+static int	inotify_read(file_t *fp, off_t *offp, struct uio *uio, \
+		    kauth_cred_t cred, int flags);
+static int	inotify_close(file_t *fp);
+static int	inotify_ioctl(file_t *fp, u_long com, void *data);
+static int	inotify_fcntl(file_t *fp, u_int com, void *data);
+static int	inotify_poll(file_t *fp, int events);
+static int	inotify_stat(file_t *fp, struct stat *st);
+static int	inotify_kqfilter(file_t *fp, struct knote *kn);
+static void	inotify_restart(file_t *fp);
+static int	inotify_fpathconf(file_t *fp, int name, register_t *retval);
+
+static const struct fileops inotify_fileops = {
+	.fo_name = "inotify",
+	.fo_read = inotify_read,
+	.fo_write = (void *)enxio,
+	.fo_ioctl = inotify_ioctl,
+	.fo_fcntl = inotify_fcntl,
+	.fo_poll = inotify_poll,
+	.fo_stat = inotify_stat,
+	.fo_close = inotify_close,
+	.fo_kqfilter = inotify_kqfilter,
+	.fo_restart = inotify_restart,
+	.fo_fpathconf = inotify_fpathconf,
+};
 
 /*
  * epoll_create(2).  Just create a kqueue instance.
@@ -673,7 +709,7 @@ epoll_recover_watch_tree(struct epoll_edge *edges, size_t nedges, size_t nfds) {
  * depth greater than LINUX_EPOLL_MAX_DEPTH.
  */
 static int
-epoll_dfs(struct epoll_edge *edges, size_t nedges, struct epoll_seen *seen,
+epoll_dfs(struct epoll_edge *edges, size_t nedges, struct known_fds *seen,
     size_t nseen, int currfd, int depth) {
 	int error;
 	size_t i;
@@ -716,7 +752,7 @@ epoll_check_loop_and_depth(struct lwp *l, int epfd, int fd)
 	int error;
 	file_t *fp;
 	struct epoll_edge *edges;
-	struct epoll_seen *seen;
+	struct known_fds *seen;
 	size_t nedges, nfds, seen_size;
 	bool fdirrelevant;
 
@@ -743,7 +779,7 @@ epoll_check_loop_and_depth(struct lwp *l, int epfd, int fd)
 	edges[0].epfd = epfd;
 	edges[0].fd = fd;
 
-	seen_size = __BITMAP_SIZE(char, nfds);
+	seen_size = KNOWN_FDS_SIZE(nfds);
 	seen = kmem_zalloc(seen_size, KM_SLEEP);
 
 	error = epoll_dfs(edges, nedges, seen, nfds, epfd, 0);
@@ -752,4 +788,219 @@ epoll_check_loop_and_depth(struct lwp *l, int epfd, int fd)
 	kmem_free(edges, nedges * sizeof(*edges));
 
 	return error;
+}
+
+/*
+ * Initialize a new inotify fd.
+ */
+static int
+do_inotify_init(struct lwp *l, register_t *retval, int flags)
+{
+	file_t *fp;
+	int error, fd;
+	struct proc *p = l->l_proc;
+	struct inotifyfd *ifd;
+	struct sys_kqueue1_args kqa;
+
+	if (flags & ~(LINUX_IN_ALL_FLAGS))
+		return EINVAL;
+
+	ifd = kmem_zalloc(sizeof(*ifd), KM_SLEEP);
+	ifd->ifd_ndeps = 1;
+	ifd->ifd_deps = kmem_zalloc(KNOWN_FDS_SIZE(ifd->ifd_ndeps), KM_SLEEP);
+
+	SCARG(&kqa, flags) = 0;
+	if (flags & LINUX_IN_NONBLOCK)
+		SCARG(&kqa, flags) |= O_NONBLOCK;
+	error = sys_kqueue1(l, &kqa, retval);
+	if (error != 0)
+		goto leave0;
+
+	ifd->ifd_kqfd = *retval;
+	ifd->ifd_kqfp = fd_getfile(ifd->ifd_kqfd);
+	KASSERT(ifd->ifd_kqfp != NULL);
+
+	error = fd_allocfile(&fp, &fd);
+	if (error != 0)
+		goto leave1;
+
+	fp->f_flag = FREAD;
+	fp->f_type = DTYPE_MISC;
+	fp->f_ops = &inotify_fileops;
+	fp->f_data = ifd;
+	fd_set_exclose(l, fd, (flags & LINUX_IN_CLOEXEC) != 0);
+	if (flags & LINUX_IN_NONBLOCK)
+		fp->f_flag |= O_NONBLOCK;
+	fd_affix(p, fp, fd);
+
+	*retval = fd;
+	return 0;
+
+leave1:
+	/* the reference we need to hold is ifd->ifd_kqfp */
+	fd_close(ifd->ifd_kqfd);
+leave0:
+	kmem_free(ifd->ifd_deps, KNOWN_FDS_SIZE(ifd->ifd_ndeps));
+	kmem_free(ifd, sizeof(*ifd));
+	return error;
+}
+
+/*
+ * inotify_init(2).  Initialize a new inotify fd with flags=0.
+ */
+int
+linux_sys_inotify_init(struct lwp *l, const void *v, register_t *retval)
+{
+	return do_inotify_init(l, retval, 0);
+}
+
+/*
+ * inotify_init(2).  Initialize a new inotify fd with the given flags.
+ */
+int
+linux_sys_inotify_init1(struct lwp *l,
+    const struct linux_sys_inotify_init1_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) flags;
+	} */
+
+	return do_inotify_init(l, retval, SCARG(uap, flags));
+}
+
+/*
+ * inotify_add_watch(2).  GTODO
+ */
+int
+linux_sys_inotify_add_watch(struct lwp *l,
+    const struct linux_sys_inotify_add_watch_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) fd;
+		syscallarg(const char *) pathname;
+		syscallarg(uint32_t) mask;
+	} */
+
+	return ENOSYS;
+}
+
+/*
+ * inotify_rm_watch(2).  GTODO
+ */
+int
+linux_sys_inotify_rm_watch(struct lwp *l,
+    const struct linux_sys_inotify_rm_watch_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) fd;
+		syscallarg(int) wd;
+	} */
+
+	return ENOSYS;
+}
+
+/*
+ * GTODO
+ */
+static int
+inotify_read(file_t *fp, off_t *offp, struct uio *uio, kauth_cred_t cred,
+    int flags)
+{
+//	struct inotifyfd *ifd = fp->f_data;
+
+	return EOPNOTSUPP;
+}
+
+/*
+ * Close all the file descriptors associated with fp.
+ */
+static int
+inotify_close(file_t *fp)
+{
+	int error;
+	size_t i;
+	file_t *ifp;
+	struct inotifyfd *ifd = fp->f_data;
+
+	/* the reference we need to hold is ifd->ifd_kqfp */
+	error = fd_close(ifd->ifd_kqfd);
+	if (error != 0)
+		return error;
+
+	for (i = 0; i < ifd->ifd_ndeps; i++) {
+		if (__BITMAP_ISSET(i, ifd->ifd_deps)) {
+			ifp = fd_getfile(i);
+			KASSERT(ifp != NULL);
+			fd_close(i);
+		}
+	}
+
+	kmem_free(ifd->ifd_deps, KNOWN_FDS_SIZE(ifd->ifd_ndeps));
+	kmem_free(ifd, sizeof(*ifd));
+	fp->f_data = NULL;
+
+	return 0;
+}
+
+/*
+ * The rest of the inotify fileops...  They just directly call the
+ * equivalent fileop on ifd_kqfp.  The only purpose of the extra level
+ * of indirection is so we can keep track of ifd_deps and close them
+ * appropriately.
+ */
+
+static int
+inotify_ioctl(file_t *fp, u_long com, void *data)
+{
+	file_t *kqfp = ((struct inotifyfd *)fp->f_data)->ifd_kqfp;
+
+	return (*kqfp->f_ops->fo_ioctl)(fp, com, data);
+}
+
+static int
+inotify_fcntl(file_t *fp, u_int com, void *data)
+{
+	file_t *kqfp = ((struct inotifyfd *)fp->f_data)->ifd_kqfp;
+
+	return (*kqfp->f_ops->fo_fcntl)(fp, com, data);
+}
+
+static int
+inotify_poll(file_t *fp, int events)
+{
+	file_t *kqfp = ((struct inotifyfd *)fp->f_data)->ifd_kqfp;
+
+	return (*kqfp->f_ops->fo_poll)(fp, events);
+}
+
+static int
+inotify_stat(file_t *fp, struct stat *st)
+{
+	file_t *kqfp = ((struct inotifyfd *)fp->f_data)->ifd_kqfp;
+
+	return (*kqfp->f_ops->fo_stat)(fp, st);
+}
+
+static int
+inotify_kqfilter(file_t *fp, struct knote *kn)
+{
+	file_t *kqfp = ((struct inotifyfd *)fp->f_data)->ifd_kqfp;
+
+	return (*kqfp->f_ops->fo_kqfilter)(fp, kn);
+}
+
+static void
+inotify_restart(file_t *fp)
+{
+	file_t *kqfp = ((struct inotifyfd *)fp->f_data)->ifd_kqfp;
+
+	(*kqfp->f_ops->fo_restart)(fp);
+}
+
+static int
+inotify_fpathconf(file_t *fp, int name, register_t *retval)
+{
+	file_t *kqfp = ((struct inotifyfd *)fp->f_data)->ifd_kqfp;
+
+	return (*kqfp->f_ops->fo_fpathconf)(fp, name, retval);
 }

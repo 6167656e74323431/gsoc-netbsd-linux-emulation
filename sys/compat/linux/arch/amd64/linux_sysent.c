@@ -1164,14 +1164,17 @@ struct sysent linux_sysent[] = {
 		.sy_call = linux_sys_nosys,
 	},		/* 252 = filler */
 	{
-		.sy_call = linux_sys_nosys,
-	},		/* 253 = filler */
+		.sy_call = (sy_call_t *)linux_sys_inotify_init
+	},		/* 253 = inotify_init */
 	{
-		.sy_call = linux_sys_nosys,
-	},		/* 254 = filler */
+		ns(struct linux_sys_inotify_add_watch_args),
+		.sy_flags = SYCALL_ARG_PTR,
+		.sy_call = (sy_call_t *)linux_sys_inotify_add_watch
+	},		/* 254 = inotify_add_watch */
 	{
-		.sy_call = linux_sys_nosys,
-	},		/* 255 = filler */
+		ns(struct linux_sys_inotify_rm_watch_args),
+		.sy_call = (sy_call_t *)linux_sys_inotify_rm_watch
+	},		/* 255 = inotify_rm_watch */
 	{
 		.sy_call = linux_sys_nosys,
 	},		/* 256 = filler */
@@ -1338,8 +1341,9 @@ struct sysent linux_sysent[] = {
 		.sy_call = (sy_call_t *)linux_sys_pipe2
 	},		/* 293 = pipe2 */
 	{
-		.sy_call = linux_sys_nosys,
-	},		/* 294 = filler */
+		ns(struct linux_sys_inotify_init1_args),
+		.sy_call = (sy_call_t *)linux_sys_inotify_init1
+	},		/* 294 = inotify_init1 */
 	{
 		ns(struct linux_sys_preadv_args),
 		.sy_flags = SYCALL_ARG_PTR,

@@ -319,9 +319,9 @@ const char *const linux_syscallnames[] = {
 	/* 250 */	"#250 (unimplemented keyctl)",
 	/* 251 */	"#251 (unimplemented ioprio_set)",
 	/* 252 */	"#252 (unimplemented ioprio_get)",
-	/* 253 */	"#253 (unimplemented inotify_init)",
-	/* 254 */	"#254 (unimplemented inotify_add_watch)",
-	/* 255 */	"#255 (unimplemented inotify_rm_watch)",
+	/* 253 */	"inotify_init",
+	/* 254 */	"inotify_add_watch",
+	/* 255 */	"inotify_rm_watch",
 	/* 256 */	"#256 (unimplemented migrate_pages)",
 	/* 257 */	"openat",
 	/* 258 */	"mkdirat",
@@ -360,7 +360,7 @@ const char *const linux_syscallnames[] = {
 	/* 291 */	"epoll_create1",
 	/* 292 */	"dup3",
 	/* 293 */	"pipe2",
-	/* 294 */	"#294 (unimplemented inotify_init1)",
+	/* 294 */	"inotify_init1",
 	/* 295 */	"preadv",
 	/* 296 */	"pwritev",
 	/* 297 */	"#297 (unimplemented rt_tgsigqueueinfo)",
@@ -863,9 +863,9 @@ const char *const altlinux_syscallnames[] = {
 	/* 250 */	NULL, /* unimplemented keyctl */
 	/* 251 */	NULL, /* unimplemented ioprio_set */
 	/* 252 */	NULL, /* unimplemented ioprio_get */
-	/* 253 */	NULL, /* unimplemented inotify_init */
-	/* 254 */	NULL, /* unimplemented inotify_add_watch */
-	/* 255 */	NULL, /* unimplemented inotify_rm_watch */
+	/* 253 */	NULL, /* inotify_init */
+	/* 254 */	NULL, /* inotify_add_watch */
+	/* 255 */	NULL, /* inotify_rm_watch */
 	/* 256 */	NULL, /* unimplemented migrate_pages */
 	/* 257 */	NULL, /* openat */
 	/* 258 */	NULL, /* mkdirat */
@@ -904,7 +904,7 @@ const char *const altlinux_syscallnames[] = {
 	/* 291 */	NULL, /* epoll_create1 */
 	/* 292 */	NULL, /* dup3 */
 	/* 293 */	NULL, /* pipe2 */
-	/* 294 */	NULL, /* unimplemented inotify_init1 */
+	/* 294 */	NULL, /* inotify_init1 */
 	/* 295 */	NULL, /* preadv */
 	/* 296 */	NULL, /* pwritev */
 	/* 297 */	NULL, /* unimplemented rt_tgsigqueueinfo */
