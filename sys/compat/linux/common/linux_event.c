@@ -86,6 +86,7 @@ struct inotifyfd {
 
 	size_t			ifd_nwds;
 	struct known_fds	*ifd_wds;
+	// GTODO ifd_lock for nwds and wds
 };
 
 static int	epoll_to_kevent(int epfd, int fd,
@@ -118,6 +119,8 @@ static int	epoll_dfs(struct epoll_edge *edges, size_t nedges,
 static int	epoll_check_loop_and_depth(struct lwp *l, int epfd, int fd);
 
 static int	do_inotify_init(struct lwp *l, register_t *retval, int flags);
+static int	inotify_close_wd(struct inotifyfd *ifd, int wd);
+
 static int	inotify_read(file_t *fp, off_t *offp, struct uio *uio, \
 		    kauth_cred_t cred, int flags);
 static int	inotify_close(file_t *fp);
@@ -872,7 +875,9 @@ linux_sys_inotify_init1(struct lwp *l,
 }
 
 /*
- * inotify_add_watch(2).  GTODO
+ * inotify_add_watch(2).  Open a fd for pathname (if desired by mask)
+ * track it and add an equivalent kqueue event for it in
+ * ifd->ifd_kqfd.
  */
 int
 linux_sys_inotify_add_watch(struct lwp *l,
@@ -883,8 +888,137 @@ linux_sys_inotify_add_watch(struct lwp *l,
 		syscallarg(const char *) pathname;
 		syscallarg(uint32_t) mask;
 	} */
+	int wd, error = 0;
+	file_t *fp;
+	struct inotifyfd *ifd;
+	struct known_fds *new_wds;
+	struct sys_open_args oa;
+	struct kevent kev;
+	struct kevent_ops k_ops = {
+		.keo_private = NULL,
+		.keo_fetch_timeout = NULL,
+		.keo_fetch_changes = epoll_kev_fetch_changes,
+		.keo_put_events = NULL,
+	};
+	const int fd = SCARG(uap, fd);
+	const uint32_t mask = SCARG(uap, mask);
 
-	return ENOSYS;
+	fp = fd_getfile(fd);
+	if (fp == NULL)
+		return EBADF;
+	if (fp->f_ops != &inotify_fileops) {
+		/* not an inotify fd */
+		error = EBADF;
+		goto leave;
+	}
+	ifd = fp->f_data;
+
+	// GTODO only create a new wd if one does not exist already and handle IN_MASK_ADD/IN_MASK_CREATE
+
+	SCARG(&oa, path) = SCARG(uap, pathname);
+	SCARG(&oa, mode) = 0;
+	SCARG(&oa, flags) = O_RDONLY;
+	if (mask & LINUX_IN_DONT_FOLLOW)
+		SCARG(&oa, flags) |= O_NOFOLLOW;
+	if (mask & LINUX_IN_ONLYDIR)
+		SCARG(&oa, flags) |= O_DIRECTORY;
+
+	error = sys_open(l, &oa, retval);
+	if (error != 0)
+		goto leave;
+	wd = *retval;
+
+	memset(&kev, 0, sizeof(kev));
+	EV_SET(&kev, wd, EVFILT_VNODE, EV_ADD|EV_ENABLE, NOTE_REVOKE, 0, 0);
+	if (mask & LINUX_IN_ONESHOT)
+		kev.flags |= EV_ONESHOT;
+
+//GTODO	if (mask & LINUX_IN_ACCESS)
+//		kev.fflags |= ;
+	if (mask & LINUX_IN_ATTRIB)
+		kev.fflags |= NOTE_ATTRIB;
+	if (mask & LINUX_IN_CLOSE_WRITE)
+		kev.fflags |= NOTE_CLOSE_WRITE;
+	if (mask & LINUX_IN_CLOSE_NOWRITE)
+		kev.fflags |= NOTE_CLOSE;
+//GTODO	if (mask & LINUX_IN_CREATE)
+//		kev.fflags |= ;
+//GTODO	if (mask & LINUX_IN_DELETE)
+//		kev.fflags |= ;
+	if (mask & LINUX_IN_DELETE_SELF)
+		kev.fflags |= NOTE_DELETE;
+	if (mask & LINUX_IN_MODIFY)
+		kev.fflags |= NOTE_WRITE;
+	if (mask & LINUX_IN_MOVE_SELF)
+		kev.fflags |= NOTE_RENAME;
+//GTODO	if (mask & LINUX_IN_MOVED_FROM)
+//		kev.fflags |= ;
+//GTODO	if (mask & LINUX_IN_MOVED_TO)
+//		kev.fflags |= ;
+	if (mask & LINUX_IN_OPEN)
+		kev.fflags |= NOTE_OPEN;
+
+        error = kevent1(retval, ifd->ifd_kqfd, &kev, 1, NULL, 0, NULL, &k_ops);
+	if (error != 0) {
+		KASSERT(fd_getfile(wd) != NULL);
+		fd_close(wd);
+	} else {
+		/* Success! */
+		*retval = wd;
+
+		/* resize ifd_nwds to accomodate wd */
+		if (KNOWN_FDS_SIZE(wd+1) > KNOWN_FDS_SIZE(ifd->ifd_nwds)) {
+			new_wds = kmem_zalloc(KNOWN_FDS_SIZE(wd+1), KM_SLEEP);
+			memcpy(new_wds, ifd->ifd_wds, KNOWN_FDS_SIZE(ifd->ifd_nwds));
+
+			kmem_free(ifd->ifd_wds, KNOWN_FDS_SIZE(ifd->ifd_nwds));
+			ifd->ifd_wds = new_wds;
+		}
+		if (wd >= ifd->ifd_nwds)
+			ifd->ifd_nwds = wd+1;
+
+		__BITMAP_SET(wd, ifd->ifd_wds);
+	}
+
+leave:
+	fd_putfile(fd);
+	return error;
+}
+
+/*
+ * Remove a wd from ifd and close wd.
+ */
+static int
+inotify_close_wd(struct inotifyfd *ifd, int wd)
+{
+	file_t *wp;
+	int error;
+	register_t retval;
+	struct kevent kev;
+	struct kevent_ops k_ops = {
+		.keo_private = NULL,
+		.keo_fetch_timeout = NULL,
+		.keo_fetch_changes = epoll_kev_fetch_changes,
+		.keo_put_events = NULL,
+	};
+
+	KASSERT(0 <= wd && wd < ifd->ifd_nwds);
+	__BITMAP_CLR(wd, ifd->ifd_wds);
+
+	wp = fd_getfile(wd);
+	if (wp == NULL) {
+		DPRINTF(("inotify_close_wd: wd=%d is already closed\n", wd));
+		return 0;
+	}
+
+	memset(&kev, 0, sizeof(kev));
+	EV_SET(&kev, wd, EVFILT_VNODE, EV_DELETE, 0, 0, 0);
+	error = kevent1(&retval, ifd->ifd_kqfd, &kev, 1, NULL, 0, NULL, &k_ops);
+	if (error != 0)
+		DPRINTF(("inotify_close_wd: attempt to disable all events for wd=%d had error=%d\n",
+		    wd, error));
+
+	return fd_close(wd);
 }
 
 /*
@@ -899,7 +1033,7 @@ linux_sys_inotify_rm_watch(struct lwp *l,
 		syscallarg(int) wd;
 	} */
 	struct inotifyfd *ifd;
-	file_t *fp, *wp;
+	file_t *fp;
 	int error = 0;
 	const int fd = SCARG(uap, fd);
 	const int wd = SCARG(uap, wd);
@@ -919,13 +1053,7 @@ linux_sys_inotify_rm_watch(struct lwp *l,
 		goto leave;
 	}
 
-        wp = fd_getfile(fd);
-	if (wp != NULL)
-		fd_close(wd);
-	else
-		DPRINTF(("linux_sys_inotify_rm_watch: inotify fd=%d had wd=%d closed externally\n",
-		    fd, wd));
-	__BITMAP_CLR(wd, ifd->ifd_wds);
+	error = inotify_close_wd(ifd, wd);
 
 leave:
 	fd_putfile(fd);
@@ -952,24 +1080,20 @@ inotify_close(file_t *fp)
 {
 	int error;
 	size_t i;
-	file_t *ifp;
 	struct inotifyfd *ifd = fp->f_data;
+
+	for (i = 0; i < ifd->ifd_nwds; i++) {
+		if (__BITMAP_ISSET(i, ifd->ifd_wds)) {
+			error = inotify_close_wd(ifd, i);
+			if (error != 0)
+				return error;
+		}
+	}
 
 	/* the reference we need to hold is ifd->ifd_kqfp */
 	error = fd_close(ifd->ifd_kqfd);
 	if (error != 0)
 		return error;
-
-	for (i = 0; i < ifd->ifd_nwds; i++) {
-		if (__BITMAP_ISSET(i, ifd->ifd_wds)) {
-			ifp = fd_getfile(i);
-			if (ifp != NULL)
-				fd_close(i);
-			else
-				DPRINTF(("inotify_close: inotify fd had wd=%lu closed externally\n",
-				    i));
-		}
-	}
 
 	kmem_free(ifd->ifd_wds, KNOWN_FDS_SIZE(ifd->ifd_nwds));
 	kmem_free(ifd, sizeof(*ifd));
