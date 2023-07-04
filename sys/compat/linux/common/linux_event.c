@@ -54,14 +54,17 @@
 
 #define KNOWN_FDS_SIZE(nfds)	__BITMAP_SIZE(char, (nfds))
 
+/* used for epoll */
 #define kext_data	ext[0]
 #define kext_epfd	ext[1]
 #define kext_fd		ext[2]
+/* used for inotify */
+#define kext_oflags	ext[0]
 
 #if DEBUG_LINUX
 #define DPRINTF(x) uprintf x
 #else
-#define DPRINTF(x)
+#define DPRINTF(x) __nothing
 #endif
 
 struct epoll_copyout_args {
@@ -81,8 +84,8 @@ struct inotifyfd {
 	int			ifd_kqfd;
 	file_t			*ifd_kqfp;
 
-	size_t			ifd_ndeps;
-	struct known_fds	*ifd_deps;
+	size_t			ifd_nwds;
+	struct known_fds	*ifd_wds;
 };
 
 static int	epoll_to_kevent(int epfd, int fd,
@@ -806,8 +809,8 @@ do_inotify_init(struct lwp *l, register_t *retval, int flags)
 		return EINVAL;
 
 	ifd = kmem_zalloc(sizeof(*ifd), KM_SLEEP);
-	ifd->ifd_ndeps = 1;
-	ifd->ifd_deps = kmem_zalloc(KNOWN_FDS_SIZE(ifd->ifd_ndeps), KM_SLEEP);
+	ifd->ifd_nwds = 1;
+	ifd->ifd_wds = kmem_zalloc(KNOWN_FDS_SIZE(ifd->ifd_nwds), KM_SLEEP);
 
 	SCARG(&kqa, flags) = 0;
 	if (flags & LINUX_IN_NONBLOCK)
@@ -840,7 +843,7 @@ leave1:
 	/* the reference we need to hold is ifd->ifd_kqfp */
 	fd_close(ifd->ifd_kqfd);
 leave0:
-	kmem_free(ifd->ifd_deps, KNOWN_FDS_SIZE(ifd->ifd_ndeps));
+	kmem_free(ifd->ifd_wds, KNOWN_FDS_SIZE(ifd->ifd_nwds));
 	kmem_free(ifd, sizeof(*ifd));
 	return error;
 }
@@ -885,7 +888,7 @@ linux_sys_inotify_add_watch(struct lwp *l,
 }
 
 /*
- * inotify_rm_watch(2).  GTODO
+ * inotify_rm_watch(2).  Close wd and remove it from ifd->ifd_wds.
  */
 int
 linux_sys_inotify_rm_watch(struct lwp *l,
@@ -895,8 +898,38 @@ linux_sys_inotify_rm_watch(struct lwp *l,
 		syscallarg(int) fd;
 		syscallarg(int) wd;
 	} */
+	struct inotifyfd *ifd;
+	file_t *fp, *wp;
+	int error = 0;
+	const int fd = SCARG(uap, fd);
+	const int wd = SCARG(uap, wd);
 
-	return ENOSYS;
+	fp = fd_getfile(fd);
+	if (fp == NULL)
+		return EBADF;
+	if (fp->f_ops != &inotify_fileops) {
+		/* not an inotify fd */
+		error = EINVAL;
+		goto leave;
+	}
+
+	ifd = fp->f_data;
+	if (wd < 0 || wd >= ifd->ifd_nwds || !__BITMAP_ISSET(wd, ifd->ifd_wds)) {
+		error = EINVAL;
+		goto leave;
+	}
+
+        wp = fd_getfile(fd);
+	if (wp != NULL)
+		fd_close(wd);
+	else
+		DPRINTF(("linux_sys_inotify_rm_watch: inotify fd=%d had wd=%d closed externally\n",
+		    fd, wd));
+	__BITMAP_CLR(wd, ifd->ifd_wds);
+
+leave:
+	fd_putfile(fd);
+	return error;
 }
 
 /*
@@ -927,15 +960,18 @@ inotify_close(file_t *fp)
 	if (error != 0)
 		return error;
 
-	for (i = 0; i < ifd->ifd_ndeps; i++) {
-		if (__BITMAP_ISSET(i, ifd->ifd_deps)) {
+	for (i = 0; i < ifd->ifd_nwds; i++) {
+		if (__BITMAP_ISSET(i, ifd->ifd_wds)) {
 			ifp = fd_getfile(i);
-			KASSERT(ifp != NULL);
-			fd_close(i);
+			if (ifp != NULL)
+				fd_close(i);
+			else
+				DPRINTF(("inotify_close: inotify fd had wd=%lu closed externally\n",
+				    i));
 		}
 	}
 
-	kmem_free(ifd->ifd_deps, KNOWN_FDS_SIZE(ifd->ifd_ndeps));
+	kmem_free(ifd->ifd_wds, KNOWN_FDS_SIZE(ifd->ifd_nwds));
 	kmem_free(ifd, sizeof(*ifd));
 	fp->f_data = NULL;
 
@@ -945,7 +981,7 @@ inotify_close(file_t *fp)
 /*
  * The rest of the inotify fileops...  They just directly call the
  * equivalent fileop on ifd_kqfp.  The only purpose of the extra level
- * of indirection is so we can keep track of ifd_deps and close them
+ * of indirection is so we can keep track of ifd_wds and close them
  * appropriately.
  */
 
