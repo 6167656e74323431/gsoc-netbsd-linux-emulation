@@ -1,3 +1,32 @@
+/*-
+ * Copyright (c) 2023 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Theodore Preduta.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
 #include <sys/param.h>
 #include <sys/types.h>
 #include <sys/fcntl.h>
@@ -9,7 +38,9 @@
 #include <uvm/uvm_extern.h>
 #include <uvm/uvm_object.h>
 
-#define F_SEAL_ANY_WRITE (F_SEAL_WRITE|F_SEAL_FUTURE_WRITE)
+#define F_SEAL_ANY_WRITE	(F_SEAL_WRITE|F_SEAL_FUTURE_WRITE)
+#define MFD_KNOWN_SEALS		(F_SEAL_SEAL|F_SEAL_SHRINK|F_SEAL_GROW \
+				|F_SEAL_WRITE|F_SEAL_FUTURE_WRITE)
 
 static const char memfd_prefix[] = "memfd:";
 
@@ -76,11 +107,8 @@ sys_memfd_create(struct lwp *l, const struct sys_memfd_create_args *uap,
 	strcpy(mfd->mfd_name, memfd_prefix);
 	error = copyinstr(SCARG(uap, name), &mfd->mfd_name[sizeof(memfd_prefix)-1],
 	    sizeof(mfd->mfd_name) - sizeof(memfd_prefix), NULL);
-	if (error != 0) {
-		if (error == ENAMETOOLONG)
-			error = EINVAL;
+	if (error != 0)
 		goto leave;
-	}
 
 	getnanotime(&mfd->mfd_btime);
 
@@ -213,6 +241,9 @@ memfd_fcntl(file_t *fp, u_int cmd, void *data)
 		if (mfd->mfd_seals & F_SEAL_SEAL)
 			return EPERM;
 
+		if (*(int *)data & ~MFD_KNOWN_SEALS)
+		        return EINVAL;
+
 		/*
 		 * Can only add F_SEAL_WRITE if there are no currently
 		 * open mmaps.
@@ -233,7 +264,7 @@ memfd_fcntl(file_t *fp, u_int cmd, void *data)
 		return 0;
 
 	default:
-		return EOPNOTSUPP;
+		return EINVAL;
 	}
 }
 
