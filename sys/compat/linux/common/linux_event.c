@@ -86,7 +86,10 @@ struct inotifyfd {
 
 	size_t			ifd_nwds;
 	struct known_fds	*ifd_wds;
-	// GTODO ifd_lock for nwds and wds
+//GTODO	kmutex_t		ifd_wdlock;
+
+	struct inotify_event	ifd_buf;
+//GTODO	kmutex_t		ifd_buflock;
 };
 
 static int	epoll_to_kevent(int epfd, int fd,
@@ -120,6 +123,9 @@ static int	epoll_check_loop_and_depth(struct lwp *l, int epfd, int fd);
 
 static int	do_inotify_init(struct lwp *l, register_t *retval, int flags);
 static int	inotify_close_wd(struct inotifyfd *ifd, int wd);
+static int	inotify_kev_put_events(void *ctx, struct kevent *events, \
+		    struct kevent *eventlist, size_t index, int n);
+static uint32_t	inotify_get_single_mask_bit(uint32_t haystack);
 
 static int	inotify_read(file_t *fp, off_t *offp, struct uio *uio, \
 		    kauth_cred_t cred, int flags);
@@ -903,6 +909,9 @@ linux_sys_inotify_add_watch(struct lwp *l,
 	const int fd = SCARG(uap, fd);
 	const uint32_t mask = SCARG(uap, mask);
 
+	if (mask & ~LINUX_IN_ADD_KNOWN)
+		return EINVAL;
+
 	fp = fd_getfile(fd);
 	if (fp == NULL)
 		return EBADF;
@@ -929,12 +938,13 @@ linux_sys_inotify_add_watch(struct lwp *l,
 	wd = *retval;
 
 	memset(&kev, 0, sizeof(kev));
-	EV_SET(&kev, wd, EVFILT_VNODE, EV_ADD|EV_ENABLE, NOTE_REVOKE, 0, 0);
+	EV_SET(&kev, wd, EVFILT_VNODE, EV_ADD|EV_ENABLE,
+	    NOTE_DELETE|NOTE_REVOKE, 0, 0);
 	if (mask & LINUX_IN_ONESHOT)
 		kev.flags |= EV_ONESHOT;
 
-//GTODO	if (mask & LINUX_IN_ACCESS)
-//		kev.fflags |= ;
+	if (mask & LINUX_IN_ACCESS)
+		kev.fflags |= NOTE_READ;
 	if (mask & LINUX_IN_ATTRIB)
 		kev.fflags |= NOTE_ATTRIB;
 	if (mask & LINUX_IN_CLOSE_WRITE)
@@ -957,6 +967,9 @@ linux_sys_inotify_add_watch(struct lwp *l,
 //		kev.fflags |= ;
 	if (mask & LINUX_IN_OPEN)
 		kev.fflags |= NOTE_OPEN;
+
+	kev.ext[0] = kev.flags; // nocheckin
+	kev.ext[1] = kev.fflags;
 
         error = kevent1(retval, ifd->ifd_kqfd, &kev, 1, NULL, 0, NULL, &k_ops);
 	if (error != 0) {
@@ -1064,12 +1077,95 @@ leave:
  * GTODO
  */
 static int
+inotify_kev_put_events(void *ctx, struct kevent *events,
+    struct kevent *eventlist, size_t index, int n)
+{
+	struct inotifyfd ifd = ctx;
+	struct linux_inotify_event *bufp = &ifd->ifd_buf;
+	const uint32_t new_cookie = bufp->cookie + 1;
+
+	KASSERT(n == 1);
+	KASSERT(index == 0);
+	KASSERT(events->filter == EVFILT_VNODE);
+	KASSERT(ifd != NULL);
+
+	memset(bufp, 0, sizeof(*bufp));
+	bufp->cookie = new_cookie;
+	bufp->wd = events->ident;
+
+	if (events->fflags & NOTE_ATTRIB)
+		bufp->mask |= LINUX_IN_ATTRIB;
+	if (events->fflags & NOTE_CLOSE)
+		bufp->mask |= LINUX_IN_CLOSE_NOWRITE;
+	if (events->fflags & NOTE_CLOSE_WRITE)
+		bufp->mask |= LINUX_IN_CLOSE_WRITE;
+	if (events->fflags & NOTE_DELETE)
+		bufp->mask |= LINUX_IN_DELETE_SELF;
+//GTODO	if (events->fflags & NOTE_EXTEND)
+//		bufp->mask |= LINUX_IN_;
+//GTODO	if (events->fflags & NOTE_LINK)
+//		bufp->mask |= LINUX_IN_;
+	if (events->fflags & NOTE_OPEN)
+		bufp->mask |= LINUX_IN_OPEN;
+	if (events->fflags & NOTE_READ)
+		bufp->mask |= LINUX_IN_ACCESS;
+//GTODO	if (events->fflags & NOTE_RENAME)
+//		bufp->mask |= LINUX_IN_MOVE_SELF;
+	if (events->fflags & NOTE_REVOKE)
+		bufp->mask |= LINUX_IN_UNMOUNT|LINUX_IN_IGNORED;
+//GTODO	if (events->fflags & NOTE_WRITE)
+//		bufp->mask |= LINUX_IN_;
+
+	return 0;
+}
+
+/*
+ * GTODO
+ */
+static uint32_t
+inotify_get_single_mask_bit(uint32_t haystack)
+{
+	uint32_t needle = 1;
+
+	for (; needle != 0; needle << 1) 
+		if (haystack & needle)
+			return needle;
+
+	return 0;
+}
+
+/*
+ * GTODO
+ */
+static int
 inotify_read(file_t *fp, off_t *offp, struct uio *uio, kauth_cred_t cred,
     int flags)
 {
-//	struct inotifyfd *ifd = fp->f_data;
+	register_t retval;
+	struct linux_inotify_event obuf;
+	int error = 0;
+	struct inotifyfd *ifd = fp->f_data;
+	struct kevent_ops k_ops = {
+		.keo_private = ifd,
+		.keo_fetch_timeout = NULL,
+		.keo_fetch_changes = NULL,
+		.keo_put_events = inotify_kev_put_events,
+	};
 
-	return EOPNOTSUPP;
+	/* XXX the checks should probably be on individual iovecs */
+	if (uio->uio_resid < sizeof(struct linux_inotify_event) + LINUX_NAME_MAX + 1)
+		return EINVAL;
+
+	if (ifd->ifd_buf.mask == 0) {
+		error = kevent1(&retval, ifd->ifd_kqfd, NULL, 0, NULL, 1,
+		    NULL, &k_ops);
+		if (error != 0)
+			goto leave;
+		KASSERT(retval == 1);
+	}
+
+leave:
+	return error;
 }
 
 /*
