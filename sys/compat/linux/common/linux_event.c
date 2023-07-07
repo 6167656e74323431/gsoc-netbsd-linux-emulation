@@ -88,15 +88,17 @@ struct inotifyfd {
 	int			ifd_kqfd;	/* kqueue fd used by this inotify instance */
 	file_t			*ifd_kqfp;	/* reference to ifd_kqfd, for convenience */
 
-	struct known_fds	*ifd_wds;	/* bitmap of the fds that are part of
-						   this inotify instance */
-	size_t			ifd_nwds;	/* max watch descriptor that can be
-						   stored in ifd_wds + 1 */
+	struct known_fds	*ifd_wds;	/* bitmap of the fds that are part of */
+						/* this inotify instance */
+	size_t			ifd_nwds;	/* max watch descriptor that can be */
+						/* stored in ifd_wds + 1 */
 	kmutex_t		ifd_wdlock;	/* lock for ifd_wds and ifd_nwds */
 
         TAILQ_HEAD(, inotify_entry) ifd_q;	/* queue of pending events */
 	size_t			ifd_qcount;	/* number of pending events */
-	kmutex_t		ifd_qlock;	/* lock for ifd_q* */
+	kcondvar_t		ifd_qcv;	/* condvar for blocking reads */
+	kmutex_t		ifd_qlock;	/* lock for ifd_q* and interlock */
+						/* for ifd_qcv */
 };
 
 static int	epoll_to_kevent(int epfd, int fd,
@@ -131,6 +133,11 @@ static int	epoll_check_loop_and_depth(struct lwp *l, int epfd, int fd);
 static int	do_inotify_init(struct lwp *l, register_t *retval, int flags);
 static int	inotify_close_wd(struct inotifyfd *ifd, int wd);
 static uint32_t	inotify_mask_to_kevent_fflags(uint32_t mask);
+static void	do_kevent_to_inotify(int32_t wd, uint32_t mask, \
+		    uint32_t cookie, struct linux_inotify_event *buf, \
+		    size_t *nbuf);
+static size_t	kevent_to_inotify(int wd, uint32_t flags, uint32_t fflags, \
+		    struct linux_inotify_event *buf);
 
 static int	inotify_filt_attach(struct knote *kn);
 static void	inotify_filt_detach(struct knote *kn);
@@ -859,6 +866,7 @@ do_inotify_init(struct lwp *l, register_t *retval, int flags)
 	ifd = kmem_zalloc(sizeof(*ifd), KM_SLEEP);
 	mutex_init(&ifd->ifd_wdlock, MUTEX_DEFAULT, IPL_NONE);
 	mutex_init(&ifd->ifd_qlock, MUTEX_DEFAULT, IPL_NONE);
+	cv_init(&ifd->ifd_qcv, "inotify");
 	TAILQ_INIT(&ifd->ifd_q);
 
 	ifd->ifd_nwds = 1;
@@ -1020,9 +1028,6 @@ linux_sys_inotify_add_watch(struct lwp *l,
 	if (mask & LINUX_IN_ONESHOT)
 		kev.flags |= EV_ONESHOT;
 	kev.fflags |= inotify_mask_to_kevent_fflags(mask);
-
-	kev.ext[0] = kev.flags; // nocheckin
-	kev.ext[1] = kev.fflags;
 
         error = kevent1(retval, ifd->ifd_kqfd, &kev, 1, NULL, 0, NULL, &k_ops);
 	if (error != 0) {
@@ -1201,10 +1206,12 @@ kevent_to_inotify(int wd, uint32_t flags, uint32_t fflags,
 		do_kevent_to_inotify(wd, LINUX_IN_CLOSE_NOWRITE, 0, buf, &nbuf);
 	if (fflags & NOTE_CLOSE_WRITE)
 		do_kevent_to_inotify(wd, LINUX_IN_CLOSE_WRITE, 0, buf, &nbuf);
-	if (fflags & NOTE_DELETE)
+	if (fflags & NOTE_DELETE) {
 		do_kevent_to_inotify(wd, LINUX_IN_DELETE_SELF, 0, buf, &nbuf);
-//GTODO	if (fflags & NOTE_EXTEND)
-//		mask |= LINUX_IN_;
+		needs_ignored = 1;
+	}
+	if (fflags & (NOTE_EXTEND|NOTE_WRITE))
+		do_kevent_to_inotify(wd, LINUX_IN_MODIFY, 0, buf, &nbuf);
 //GTODO	if (fflags & NOTE_LINK)
 //		mask |= LINUX_IN_;
 	if (fflags & NOTE_OPEN)
@@ -1217,13 +1224,13 @@ kevent_to_inotify(int wd, uint32_t flags, uint32_t fflags,
 		do_kevent_to_inotify(wd, LINUX_IN_UNMOUNT, 0, buf, &nbuf);
 		needs_ignored = 1;
 	}
-//GTODO	if (fflags & NOTE_WRITE)
-//		mask |= LINUX_IN_;
 
 	if (flags & EV_ONESHOT)
 		needs_ignored = 1;
-	if (needs_ignored)
+	if (needs_ignored) {
 		do_kevent_to_inotify(wd, LINUX_IN_IGNORED, 0, buf, &nbuf);
+		// GTODO can remove wd at this point
+	}
 
 	return nbuf;
 }
@@ -1255,31 +1262,75 @@ inotify_filt_event(struct knote *kn, long hint)
 		memcpy(&tmp->ie_event, &buf[i], sizeof(tmp->ie_event));
 
 		TAILQ_INSERT_TAIL(&ifd->ifd_q, tmp, ie_entries);
+		ifd->ifd_qcount++;
 	}
-	uprintf("nocheckin hint=%lx nbuf=%lu\n", hint, nbuf);
+	if (nbuf > 0)
+		cv_broadcast(&ifd->ifd_qcv);
+	else
+		DPRINTF(("inotify_filt_event: hint=%lx resulted in 0 inotify events\n",
+	            hint));
 
 	mutex_exit(&ifd->ifd_qlock);
 	return 0;
 }
 
 /*
- * GTODO
+ * Read inotify events from the queue.
  */
 static int
 inotify_read(file_t *fp, off_t *offp, struct uio *uio, kauth_cred_t cred,
     int flags)
 {
-//	struct linux_inotify_event obuf;
+	struct inotify_entry *tmp;
+	size_t tmp_size, nread;
 	int error = 0;
-//	struct inotifyfd *ifd = fp->f_data;
+	struct inotifyfd *ifd = fp->f_data;
 
-	/* XXX the checks should probably be on individual iovecs */
-	if (uio->uio_resid < sizeof(struct linux_inotify_event) + LINUX_NAME_MAX + 1)
-		return EINVAL;
+	mutex_enter(&ifd->ifd_qlock);
 
-	// GTODO
+	if (ifd->ifd_qcount == 0) {
+		if (fp->f_flag & O_NONBLOCK) {
+			error = EAGAIN;
+			goto leave;
+		} else while (ifd->ifd_qcount == 0) {
+			/* wait until there is an event to read */
+			error = cv_wait_sig(&ifd->ifd_qcv, &ifd->ifd_qlock);
+			if (error != 0) {
+				error = EINTR;
+				goto leave;
+			}
+		}
+	}
 
-//leave:
+	KASSERT(ifd->ifd_qcount > 0);
+	KASSERT(mutex_owned(&ifd->ifd_qlock));
+
+	nread = 0;
+	while (ifd->ifd_qcount > 0) {
+		tmp = TAILQ_FIRST(&ifd->ifd_q);
+		KASSERT(tmp != NULL);
+
+		tmp_size = sizeof(tmp->ie_event); // GTODO factor in (and move) name
+		if (tmp_size > uio->uio_resid) {
+			if (nread == 0)
+				error = EINVAL;
+			break;
+		}
+
+		error = uiomove(&tmp->ie_event, sizeof(tmp->ie_event), uio);
+		if (error != 0)
+			break;
+
+		/* cleanup */
+		TAILQ_REMOVE(&ifd->ifd_q, tmp, ie_entries);
+		kmem_free(tmp, sizeof(*tmp));
+
+		nread++;
+		ifd->ifd_qcount--;
+	}
+
+leave:
+	mutex_exit(&ifd->ifd_qlock);
 	return error;
 }
 
@@ -1293,6 +1344,10 @@ inotify_close(file_t *fp)
 	size_t i;
 	struct inotifyfd *ifd = fp->f_data;
 
+	/*
+	 * must close dependent fds first, otherwise closing
+	 * ifd->ifd_kqfd will deadlock
+	 */
 	for (i = 0; i < ifd->ifd_nwds; i++) {
 		if (__BITMAP_ISSET(i, ifd->ifd_wds)) {
 			error = inotify_close_wd(ifd, i);
@@ -1308,6 +1363,7 @@ inotify_close(file_t *fp)
 
 	mutex_destroy(&ifd->ifd_wdlock);
 	mutex_destroy(&ifd->ifd_qlock);
+	cv_destroy(&ifd->ifd_qcv);
 
 	kmem_free(ifd->ifd_wds, KNOWN_FDS_SIZE(ifd->ifd_nwds));
 	kmem_free(ifd, sizeof(*ifd));
@@ -1317,14 +1373,8 @@ inotify_close(file_t *fp)
 }
 
 /*
- * The rest of the inotify fileops...  They just directly call the
- * equivalent fileop on ifd_kqfp.  The only purpose of the extra level
- * of indirection is so we can keep track of ifd_wds and close them
- * appropriately.
- *
- * GTODO this is nonsense
+ * GTODO
  */
-
 static int
 inotify_ioctl(file_t *fp, u_long com, void *data)
 {
@@ -1333,6 +1383,9 @@ inotify_ioctl(file_t *fp, u_long com, void *data)
 	return (*kqfp->f_ops->fo_ioctl)(fp, com, data);
 }
 
+/*
+ * GTODO
+ */
 static int
 inotify_fcntl(file_t *fp, u_int com, void *data)
 {
@@ -1341,6 +1394,9 @@ inotify_fcntl(file_t *fp, u_int com, void *data)
 	return (*kqfp->f_ops->fo_fcntl)(fp, com, data);
 }
 
+/*
+ * GTODO
+ */
 static int
 inotify_poll(file_t *fp, int events)
 {
@@ -1349,6 +1405,9 @@ inotify_poll(file_t *fp, int events)
 	return (*kqfp->f_ops->fo_poll)(fp, events);
 }
 
+/*
+ * GTODO
+ */
 static int
 inotify_stat(file_t *fp, struct stat *st)
 {
@@ -1357,6 +1416,9 @@ inotify_stat(file_t *fp, struct stat *st)
 	return (*kqfp->f_ops->fo_stat)(fp, st);
 }
 
+/*
+ * GTODO
+ */
 static int
 inotify_kqfilter(file_t *fp, struct knote *kn)
 {
@@ -1365,6 +1427,9 @@ inotify_kqfilter(file_t *fp, struct knote *kn)
 	return (*kqfp->f_ops->fo_kqfilter)(fp, kn);
 }
 
+/*
+ * GTODO
+ */
 static void
 inotify_restart(file_t *fp)
 {
@@ -1373,6 +1438,9 @@ inotify_restart(file_t *fp)
 	(*kqfp->f_ops->fo_restart)(fp);
 }
 
+/*
+ * GTODO
+ */
 static int
 inotify_fpathconf(file_t *fp, int name, register_t *retval)
 {
