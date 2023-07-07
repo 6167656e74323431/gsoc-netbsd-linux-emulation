@@ -112,4 +112,7 @@ struct linux_inotify_event {
 	char		name[];
 };
 
+int linux_event_init(void);
+int linux_event_fini(void);
+
 #endif	/* !_LINUX_EVENT_H */

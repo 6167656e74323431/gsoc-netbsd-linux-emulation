@@ -52,14 +52,13 @@
 #define LINUX_EPOLL_MAX_EVENTS	(INT_MAX / sizeof(struct linux_epoll_event))
 #define LINUX_EPOLL_MAX_DEPTH	5
 
+#define LINUX_INOTIFY_MAX_FROM_KEVENT	3
+
 #define KNOWN_FDS_SIZE(nfds)	__BITMAP_SIZE(char, (nfds))
 
-/* used for epoll */
 #define kext_data	ext[0]
 #define kext_epfd	ext[1]
 #define kext_fd		ext[2]
-/* used for inotify */
-#define kext_oflags	ext[0]
 
 #if DEBUG_LINUX
 #define DPRINTF(x) uprintf x
@@ -80,16 +79,24 @@ struct epoll_edge {
 
 __BITMAP_TYPE(known_fds, char, 1);
 
+struct inotify_entry {
+	TAILQ_ENTRY(inotify_entry)	ie_entries;
+	struct linux_inotify_event	ie_event;
+};
+
 struct inotifyfd {
-	int			ifd_kqfd;
-	file_t			*ifd_kqfp;
+	int			ifd_kqfd;	/* kqueue fd used by this inotify instance */
+	file_t			*ifd_kqfp;	/* reference to ifd_kqfd, for convenience */
 
-	size_t			ifd_nwds;
-	struct known_fds	*ifd_wds;
-//GTODO	kmutex_t		ifd_wdlock;
+	struct known_fds	*ifd_wds;	/* bitmap of the fds that are part of
+						   this inotify instance */
+	size_t			ifd_nwds;	/* max watch descriptor that can be
+						   stored in ifd_wds + 1 */
+	kmutex_t		ifd_wdlock;	/* lock for ifd_wds and ifd_nwds */
 
-	struct inotify_event	ifd_buf;
-//GTODO	kmutex_t		ifd_buflock;
+        TAILQ_HEAD(, inotify_entry) ifd_q;	/* queue of pending events */
+	size_t			ifd_qcount;	/* number of pending events */
+	kmutex_t		ifd_qlock;	/* lock for ifd_q* */
 };
 
 static int	epoll_to_kevent(int epfd, int fd,
@@ -123,9 +130,11 @@ static int	epoll_check_loop_and_depth(struct lwp *l, int epfd, int fd);
 
 static int	do_inotify_init(struct lwp *l, register_t *retval, int flags);
 static int	inotify_close_wd(struct inotifyfd *ifd, int wd);
-static int	inotify_kev_put_events(void *ctx, struct kevent *events, \
-		    struct kevent *eventlist, size_t index, int n);
-static uint32_t	inotify_get_single_mask_bit(uint32_t haystack);
+static uint32_t	inotify_mask_to_kevent_fflags(uint32_t mask);
+
+static int	inotify_filt_attach(struct knote *kn);
+static void	inotify_filt_detach(struct knote *kn);
+static int	inotify_filt_event(struct knote *kn, long hint);
 
 static int	inotify_read(file_t *fp, off_t *offp, struct uio *uio, \
 		    kauth_cred_t cred, int flags);
@@ -137,6 +146,17 @@ static int	inotify_stat(file_t *fp, struct stat *st);
 static int	inotify_kqfilter(file_t *fp, struct knote *kn);
 static void	inotify_restart(file_t *fp);
 static int	inotify_fpathconf(file_t *fp, int name, register_t *retval);
+
+static const char inotify_filtname[] = "LINUX_INOTIFY";
+static int inotify_filtid;
+
+static const struct filterops inotify_filtops = {
+	.f_flags = FILTEROP_ISFD | FILTEROP_MPSAFE,
+	.f_attach = inotify_filt_attach,
+	.f_detach = inotify_filt_detach,
+	.f_event = inotify_filt_event,
+	.f_touch = NULL,
+};
 
 static const struct fileops inotify_fileops = {
 	.fo_name = "inotify",
@@ -151,6 +171,25 @@ static const struct fileops inotify_fileops = {
 	.fo_restart = inotify_restart,
 	.fo_fpathconf = inotify_fpathconf,
 };
+
+/*
+ * Register the custom kfilter for inotify.
+ */
+int
+linux_event_init(void)
+{
+	return kfilter_register(inotify_filtname, &inotify_filtops,
+	    &inotify_filtid);
+}
+
+/*
+ * Unregister the custom kfilter for inotify.
+ */
+int
+linux_event_fini(void)
+{
+	return kfilter_unregister(inotify_filtname);
+}
 
 /*
  * epoll_create(2).  Just create a kqueue instance.
@@ -818,6 +857,10 @@ do_inotify_init(struct lwp *l, register_t *retval, int flags)
 		return EINVAL;
 
 	ifd = kmem_zalloc(sizeof(*ifd), KM_SLEEP);
+	mutex_init(&ifd->ifd_wdlock, MUTEX_DEFAULT, IPL_NONE);
+	mutex_init(&ifd->ifd_qlock, MUTEX_DEFAULT, IPL_NONE);
+	TAILQ_INIT(&ifd->ifd_q);
+
 	ifd->ifd_nwds = 1;
 	ifd->ifd_wds = kmem_zalloc(KNOWN_FDS_SIZE(ifd->ifd_nwds), KM_SLEEP);
 
@@ -841,8 +884,6 @@ do_inotify_init(struct lwp *l, register_t *retval, int flags)
 	fp->f_ops = &inotify_fileops;
 	fp->f_data = ifd;
 	fd_set_exclose(l, fd, (flags & LINUX_IN_CLOEXEC) != 0);
-	if (flags & LINUX_IN_NONBLOCK)
-		fp->f_flag |= O_NONBLOCK;
 	fd_affix(p, fp, fd);
 
 	*retval = fd;
@@ -878,6 +919,42 @@ linux_sys_inotify_init1(struct lwp *l,
 	} */
 
 	return do_inotify_init(l, retval, SCARG(uap, flags));
+}
+
+/*
+ * Convert inotify mask to the fflags of an equivalent kevent.
+ */
+static uint32_t
+inotify_mask_to_kevent_fflags(uint32_t mask)
+{
+	uint32_t fflags = 0;
+
+	if (mask & LINUX_IN_ACCESS)
+		fflags |= NOTE_READ;
+	if (mask & LINUX_IN_ATTRIB)
+		fflags |= NOTE_ATTRIB;
+	if (mask & LINUX_IN_CLOSE_WRITE)
+		fflags |= NOTE_CLOSE_WRITE;
+	if (mask & LINUX_IN_CLOSE_NOWRITE)
+		fflags |= NOTE_CLOSE;
+//GTODO	if (mask & LINUX_IN_CREATE)
+//		fflags |= ;
+//GTODO	if (mask & LINUX_IN_DELETE)
+//		fflags |= ;
+	if (mask & LINUX_IN_DELETE_SELF)
+		fflags |= NOTE_DELETE;
+	if (mask & LINUX_IN_MODIFY)
+		fflags |= NOTE_WRITE;
+	if (mask & LINUX_IN_MOVE_SELF)
+		fflags |= NOTE_RENAME;
+//GTODO	if (mask & LINUX_IN_MOVED_FROM)
+//		fflags |= ;
+//GTODO	if (mask & LINUX_IN_MOVED_TO)
+//		fflags |= ;
+	if (mask & LINUX_IN_OPEN)
+		fflags |= NOTE_OPEN;
+
+	return fflags;
 }
 
 /*
@@ -938,35 +1015,11 @@ linux_sys_inotify_add_watch(struct lwp *l,
 	wd = *retval;
 
 	memset(&kev, 0, sizeof(kev));
-	EV_SET(&kev, wd, EVFILT_VNODE, EV_ADD|EV_ENABLE,
-	    NOTE_DELETE|NOTE_REVOKE, 0, 0);
+	EV_SET(&kev, wd, inotify_filtid, EV_ADD|EV_ENABLE,
+	    NOTE_DELETE|NOTE_REVOKE, 0, ifd);
 	if (mask & LINUX_IN_ONESHOT)
 		kev.flags |= EV_ONESHOT;
-
-	if (mask & LINUX_IN_ACCESS)
-		kev.fflags |= NOTE_READ;
-	if (mask & LINUX_IN_ATTRIB)
-		kev.fflags |= NOTE_ATTRIB;
-	if (mask & LINUX_IN_CLOSE_WRITE)
-		kev.fflags |= NOTE_CLOSE_WRITE;
-	if (mask & LINUX_IN_CLOSE_NOWRITE)
-		kev.fflags |= NOTE_CLOSE;
-//GTODO	if (mask & LINUX_IN_CREATE)
-//		kev.fflags |= ;
-//GTODO	if (mask & LINUX_IN_DELETE)
-//		kev.fflags |= ;
-	if (mask & LINUX_IN_DELETE_SELF)
-		kev.fflags |= NOTE_DELETE;
-	if (mask & LINUX_IN_MODIFY)
-		kev.fflags |= NOTE_WRITE;
-	if (mask & LINUX_IN_MOVE_SELF)
-		kev.fflags |= NOTE_RENAME;
-//GTODO	if (mask & LINUX_IN_MOVED_FROM)
-//		kev.fflags |= ;
-//GTODO	if (mask & LINUX_IN_MOVED_TO)
-//		kev.fflags |= ;
-	if (mask & LINUX_IN_OPEN)
-		kev.fflags |= NOTE_OPEN;
+	kev.fflags |= inotify_mask_to_kevent_fflags(mask);
 
 	kev.ext[0] = kev.flags; // nocheckin
 	kev.ext[1] = kev.fflags;
@@ -1074,63 +1127,138 @@ leave:
 }
 
 /*
- * GTODO
+ * Attach the inotify filter.
  */
 static int
-inotify_kev_put_events(void *ctx, struct kevent *events,
-    struct kevent *eventlist, size_t index, int n)
+inotify_filt_attach(struct knote *kn)
 {
-	struct inotifyfd ifd = ctx;
-	struct linux_inotify_event *bufp = &ifd->ifd_buf;
-	const uint32_t new_cookie = bufp->cookie + 1;
+	file_t *fp = kn->kn_obj;
+	struct vnode *vp;
 
-	KASSERT(n == 1);
-	KASSERT(index == 0);
-	KASSERT(events->filter == EVFILT_VNODE);
-	KASSERT(ifd != NULL);
+	KASSERT(fp->f_type == DTYPE_VNODE);
+	vp = fp->f_vnode;
 
-	memset(bufp, 0, sizeof(*bufp));
-	bufp->cookie = new_cookie;
-	bufp->wd = events->ident;
+	/*
+	 * Needs to be set so that we get the same event handling as
+	 * EVFILT_VNODE.  Otherwise we don't get any events.
+	 *
+	 * A consequence of this is that modifications/removals of
+	 * this knote need to specify EVFILT_VNODE rather than
+	 * inotify_filtid.
+	 */
+	kn->kn_filter = EVFILT_VNODE;
 
-	if (events->fflags & NOTE_ATTRIB)
-		bufp->mask |= LINUX_IN_ATTRIB;
-	if (events->fflags & NOTE_CLOSE)
-		bufp->mask |= LINUX_IN_CLOSE_NOWRITE;
-	if (events->fflags & NOTE_CLOSE_WRITE)
-		bufp->mask |= LINUX_IN_CLOSE_WRITE;
-	if (events->fflags & NOTE_DELETE)
-		bufp->mask |= LINUX_IN_DELETE_SELF;
-//GTODO	if (events->fflags & NOTE_EXTEND)
-//		bufp->mask |= LINUX_IN_;
-//GTODO	if (events->fflags & NOTE_LINK)
-//		bufp->mask |= LINUX_IN_;
-	if (events->fflags & NOTE_OPEN)
-		bufp->mask |= LINUX_IN_OPEN;
-	if (events->fflags & NOTE_READ)
-		bufp->mask |= LINUX_IN_ACCESS;
-//GTODO	if (events->fflags & NOTE_RENAME)
-//		bufp->mask |= LINUX_IN_MOVE_SELF;
-	if (events->fflags & NOTE_REVOKE)
-		bufp->mask |= LINUX_IN_UNMOUNT|LINUX_IN_IGNORED;
-//GTODO	if (events->fflags & NOTE_WRITE)
-//		bufp->mask |= LINUX_IN_;
+	kn->kn_fop = &inotify_filtops;
+	kn->kn_hook = vp;
+	vn_knote_attach(vp, kn);
 
 	return 0;
 }
 
 /*
+ * Detach the inotify filter.
+ */
+static void
+inotify_filt_detach(struct knote *kn)
+{
+	struct vnode *vp = (struct vnode *)kn->kn_hook;
+
+	vn_knote_detach(vp, kn);
+}
+
+/*
  * GTODO
  */
-static uint32_t
-inotify_get_single_mask_bit(uint32_t haystack)
+static void
+do_kevent_to_inotify(int32_t wd, uint32_t mask, uint32_t cookie,
+    struct linux_inotify_event *buf, size_t *nbuf)
 {
-	uint32_t needle = 1;
+	KASSERT(*nbuf < LINUX_INOTIFY_MAX_FROM_KEVENT);
 
-	for (; needle != 0; needle << 1) 
-		if (haystack & needle)
-			return needle;
+	memset(&buf[*nbuf], 0, sizeof(*buf));
 
+	buf[*nbuf].wd = wd;
+	buf[*nbuf].mask = mask;
+	buf[*nbuf].cookie = cookie;
+
+	++(*nbuf);
+}
+
+/*
+ * Convert a kevent flags and fflags for EVFILT_VNODE to some number
+ * of inotify events.
+ */
+static size_t
+kevent_to_inotify(int wd, uint32_t flags, uint32_t fflags,
+    struct linux_inotify_event *buf)
+{
+	bool needs_ignored = 0;
+	size_t nbuf = 0;
+
+	if (fflags & NOTE_ATTRIB)
+		do_kevent_to_inotify(wd, LINUX_IN_ATTRIB, 0, buf, &nbuf);
+	if (fflags & NOTE_CLOSE)
+		do_kevent_to_inotify(wd, LINUX_IN_CLOSE_NOWRITE, 0, buf, &nbuf);
+	if (fflags & NOTE_CLOSE_WRITE)
+		do_kevent_to_inotify(wd, LINUX_IN_CLOSE_WRITE, 0, buf, &nbuf);
+	if (fflags & NOTE_DELETE)
+		do_kevent_to_inotify(wd, LINUX_IN_DELETE_SELF, 0, buf, &nbuf);
+//GTODO	if (fflags & NOTE_EXTEND)
+//		mask |= LINUX_IN_;
+//GTODO	if (fflags & NOTE_LINK)
+//		mask |= LINUX_IN_;
+	if (fflags & NOTE_OPEN)
+		do_kevent_to_inotify(wd, LINUX_IN_OPEN, 0, buf, &nbuf);
+	if (fflags & NOTE_READ)
+		do_kevent_to_inotify(wd, LINUX_IN_ACCESS, 0, buf, &nbuf);
+	if (fflags & NOTE_RENAME)
+		do_kevent_to_inotify(wd, LINUX_IN_MOVE_SELF, 0, buf, &nbuf);
+	if (fflags & NOTE_REVOKE) {
+		do_kevent_to_inotify(wd, LINUX_IN_UNMOUNT, 0, buf, &nbuf);
+		needs_ignored = 1;
+	}
+//GTODO	if (fflags & NOTE_WRITE)
+//		mask |= LINUX_IN_;
+
+	if (flags & EV_ONESHOT)
+		needs_ignored = 1;
+	if (needs_ignored)
+		do_kevent_to_inotify(wd, LINUX_IN_IGNORED, 0, buf, &nbuf);
+
+	return nbuf;
+}
+
+/*
+ * Handle an event.  Unlike EVFILT_VNODE, we translate the event to a
+ * linux_inotify_event and put it in our own custom queue.
+ */
+static int
+inotify_filt_event(struct knote *kn, long hint)
+{
+	struct inotifyfd *ifd = kn->kn_kevent.udata;
+        struct vnode *vp = (struct vnode *)kn->kn_hook;
+	struct inotify_entry *tmp;
+	size_t nbuf, i;
+	struct linux_inotify_event buf[LINUX_INOTIFY_MAX_FROM_KEVENT];
+
+	hint &= kn->kn_sfflags;
+	if (hint == 0)
+		return 0;
+
+	KASSERT(mutex_owned(vp->v_interlock));
+
+	mutex_enter(&ifd->ifd_qlock);
+
+	nbuf = kevent_to_inotify(kn->kn_id, kn->kn_flags, hint, buf);
+	for (i = 0; i < nbuf; i++) {
+		tmp = kmem_zalloc(sizeof(*tmp), KM_SLEEP);
+		memcpy(&tmp->ie_event, &buf[i], sizeof(tmp->ie_event));
+
+		TAILQ_INSERT_TAIL(&ifd->ifd_q, tmp, ie_entries);
+	}
+	uprintf("nocheckin hint=%lx nbuf=%lu\n", hint, nbuf);
+
+	mutex_exit(&ifd->ifd_qlock);
 	return 0;
 }
 
@@ -1141,30 +1269,17 @@ static int
 inotify_read(file_t *fp, off_t *offp, struct uio *uio, kauth_cred_t cred,
     int flags)
 {
-	register_t retval;
-	struct linux_inotify_event obuf;
+//	struct linux_inotify_event obuf;
 	int error = 0;
-	struct inotifyfd *ifd = fp->f_data;
-	struct kevent_ops k_ops = {
-		.keo_private = ifd,
-		.keo_fetch_timeout = NULL,
-		.keo_fetch_changes = NULL,
-		.keo_put_events = inotify_kev_put_events,
-	};
+//	struct inotifyfd *ifd = fp->f_data;
 
 	/* XXX the checks should probably be on individual iovecs */
 	if (uio->uio_resid < sizeof(struct linux_inotify_event) + LINUX_NAME_MAX + 1)
 		return EINVAL;
 
-	if (ifd->ifd_buf.mask == 0) {
-		error = kevent1(&retval, ifd->ifd_kqfd, NULL, 0, NULL, 1,
-		    NULL, &k_ops);
-		if (error != 0)
-			goto leave;
-		KASSERT(retval == 1);
-	}
+	// GTODO
 
-leave:
+//leave:
 	return error;
 }
 
@@ -1191,6 +1306,9 @@ inotify_close(file_t *fp)
 	if (error != 0)
 		return error;
 
+	mutex_destroy(&ifd->ifd_wdlock);
+	mutex_destroy(&ifd->ifd_qlock);
+
 	kmem_free(ifd->ifd_wds, KNOWN_FDS_SIZE(ifd->ifd_nwds));
 	kmem_free(ifd, sizeof(*ifd));
 	fp->f_data = NULL;
@@ -1203,6 +1321,8 @@ inotify_close(file_t *fp)
  * equivalent fileop on ifd_kqfp.  The only purpose of the extra level
  * of indirection is so we can keep track of ifd_wds and close them
  * appropriately.
+ *
+ * GTODO this is nonsense
  */
 
 static int
