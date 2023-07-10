@@ -1098,7 +1098,7 @@ inotify_close_wd(struct inotifyfd *ifd, int wd)
 
 	wp = fd_getfile(wd);
 	if (wp == NULL) {
-		DPRINTF(("inotify_close_wd: wd=%d is already closed\n", wd));
+		DPRINTF(("%s: wd=%d is already closed\n", __func__, wd));
 		return 0;
 	}
 
@@ -1106,8 +1106,8 @@ inotify_close_wd(struct inotifyfd *ifd, int wd)
 	EV_SET(&kev, wd, EVFILT_VNODE, EV_DELETE, 0, 0, 0);
 	error = kevent1(&retval, ifd->ifd_kqfd, &kev, 1, NULL, 0, NULL, &k_ops);
 	if (error != 0)
-		DPRINTF(("inotify_close_wd: attempt to disable all events for wd=%d had error=%d\n",
-		    wd, error));
+		DPRINTF(("%s: attempt to disable all events for wd=%d had error=%d\n",
+		    __func__, wd, error));
 
 	return fd_close(wd);
 }
@@ -1200,11 +1200,13 @@ do_kevent_to_inotify(int32_t wd, uint32_t mask, uint32_t cookie,
 {
 	KASSERT(*nbuf < LINUX_INOTIFY_MAX_FROM_KEVENT);
 
-	memset(&buf[*nbuf], 0, sizeof(*buf));
+	buf += *nbuf;
 
-	buf[*nbuf].wd = wd;
-	buf[*nbuf].mask = mask;
-	buf[*nbuf].cookie = cookie;
+	memset(buf, 0, sizeof(*buf));
+
+	buf->wd = wd;
+	buf->mask = mask;
+	buf->cookie = cookie;
 
 	++(*nbuf);
 }
@@ -1292,8 +1294,8 @@ inotify_filt_event(struct knote *kn, long hint)
 		selnotify(&ifd->ifd_sel, 0, 0);
 		mutex_exit(&ifd->ifd_lock);
 	} else
-		DPRINTF(("inotify_filt_event: hint=%lx resulted in 0 inotify events\n",
-	            hint));
+		DPRINTF(("%s: hint=%lx resulted in 0 inotify events\n",
+		    __func__, hint));
 
 	mutex_exit(&ifd->ifd_qlock);
 	return 0;
@@ -1317,7 +1319,9 @@ inotify_read(file_t *fp, off_t *offp, struct uio *uio, kauth_cred_t cred,
 		if (fp->f_flag & O_NONBLOCK) {
 			error = EAGAIN;
 			goto leave;
-		} else while (ifd->ifd_qcount == 0) {
+		}
+
+		while (ifd->ifd_qcount == 0) {
 			/* wait until there is an event to read */
 			error = cv_wait_sig(&ifd->ifd_qcv, &ifd->ifd_qlock);
 			if (error != 0) {
@@ -1381,7 +1385,7 @@ inotify_close(file_t *fp)
 	/* the reference we need to hold is ifd->ifd_kqfp */
 	kqfp = fd_getfile(ifd->ifd_kqfd);
 	if (kqfp == NULL)
-		DPRINTF(("inotify_close: kqfp=%d is already closed\n",
+		DPRINTF(("%s: kqfp=%d is already closed\n", __func__,
 		    ifd->ifd_kqfd));
 	else {
 		error = fd_close(ifd->ifd_kqfd);
