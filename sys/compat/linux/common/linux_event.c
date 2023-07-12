@@ -55,6 +55,7 @@
 #define LINUX_EPOLL_MAX_EVENTS	(INT_MAX / sizeof(struct linux_epoll_event))
 #define LINUX_EPOLL_MAX_DEPTH	5
 
+#define LINUX_INOTIFY_MAX_QUEUED	16384
 #define LINUX_INOTIFY_MAX_FROM_KEVENT	3
 
 #define KNOWN_FDS_SIZE(nfds)	__BITMAP_SIZE(char, (nfds))
@@ -85,7 +86,7 @@ __BITMAP_TYPE(known_fds, char, 1);
 struct inotify_entry {
 	TAILQ_ENTRY(inotify_entry)	ie_entries;
 	struct linux_inotify_event	ie_event;
-	char				*ie_name; // GTODO
+	char				ie_name[NAME_MAX+1];
 };
 
 struct inotifyfd {
@@ -105,6 +106,11 @@ struct inotifyfd {
 	kcondvar_t		ifd_qcv;	/* condvar for blocking reads */
 	kmutex_t		ifd_qlock;	/* lock for ifd_q* and interlock */
 						/* for ifd_qcv */
+};
+
+struct inotify_kevent_mask_pair {
+	uint32_t inotify;
+	uint32_t kevent;
 };
 
 static int	epoll_to_kevent(int epfd, int fd,
@@ -138,12 +144,12 @@ static int	epoll_check_loop_and_depth(struct lwp *l, int epfd, int fd);
 
 static int	do_inotify_init(struct lwp *l, register_t *retval, int flags);
 static int	inotify_close_wd(struct inotifyfd *ifd, int wd);
-static uint32_t	inotify_mask_to_kevent_fflags(uint32_t mask);
+static uint32_t	inotify_mask_to_kevent_fflags(uint32_t mask, enum vtype type);
 static void	do_kevent_to_inotify(int32_t wd, uint32_t mask, \
 		    uint32_t cookie, struct linux_inotify_event *buf, \
 		    size_t *nbuf);
 static int	kevent_to_inotify(struct inotifyfd *ifd, int wd, \
-		    uint32_t flags, uint32_t fflags, \
+		    enum vtype wtype, uint32_t flags, uint32_t fflags, \
 		    struct linux_inotify_event *buf, size_t *nbuf);
 
 static int	inotify_filt_attach(struct knote *kn);
@@ -193,6 +199,44 @@ static const struct fileops inotify_fileops = {
 	.fo_restart = inotify_restart,
 	.fo_fpathconf = (void *)eopnotsupp,
 };
+
+/* basic flag translations */
+static const struct inotify_kevent_mask_pair common_inotify_to_kevent[] = {
+	{ .inotify = LINUX_IN_ATTRIB,		.kevent = NOTE_ATTRIB, },
+	{ .inotify = LINUX_IN_CLOSE_NOWRITE,	.kevent = NOTE_CLOSE, },
+	{ .inotify = LINUX_IN_OPEN,		.kevent = NOTE_OPEN, },
+	{ .inotify = LINUX_IN_MOVE_SELF,	.kevent = NOTE_RENAME, },
+};
+static const size_t common_inotify_to_kevent_len =
+    sizeof(common_inotify_to_kevent) / sizeof(common_inotify_to_kevent[0]);
+
+static const struct inotify_kevent_mask_pair vreg_inotify_to_kevent[] = {
+	{ .inotify = LINUX_IN_ACCESS,		.kevent = NOTE_READ, },
+	{ .inotify = LINUX_IN_ATTRIB,		.kevent = NOTE_ATTRIB|NOTE_LINK, },
+	{ .inotify = LINUX_IN_CLOSE_WRITE,	.kevent = NOTE_CLOSE_WRITE, },
+	{ .inotify = LINUX_IN_MODIFY,		.kevent = NOTE_WRITE, },
+};
+static const size_t vreg_inotify_to_kevent_len =
+    sizeof(vreg_inotify_to_kevent) / sizeof(vreg_inotify_to_kevent[0]);
+
+static const struct inotify_kevent_mask_pair common_kevent_to_inotify[] = {
+	{ .kevent = NOTE_ATTRIB,	.inotify = LINUX_IN_ATTRIB, },
+	{ .kevent = NOTE_CLOSE,		.inotify = LINUX_IN_CLOSE_NOWRITE, },
+	{ .kevent = NOTE_CLOSE_WRITE,	.inotify = LINUX_IN_CLOSE_WRITE, },
+	{ .kevent = NOTE_OPEN,		.inotify = LINUX_IN_OPEN, },
+	{ .kevent = NOTE_READ,		.inotify = LINUX_IN_ACCESS, },
+	{ .kevent = NOTE_RENAME,	.inotify = LINUX_IN_MOVE_SELF, },
+	{ .kevent = NOTE_REVOKE,	.inotify = LINUX_IN_UNMOUNT, },
+};
+static const size_t common_kevent_to_inotify_len =
+    sizeof(common_kevent_to_inotify) / sizeof(common_kevent_to_inotify[0]);
+
+static const struct inotify_kevent_mask_pair vreg_kevent_to_inotify[] = {
+	{ .kevent = NOTE_DELETE|NOTE_LINK, .inotify = LINUX_IN_ATTRIB, },
+	{ .kevent = NOTE_WRITE,		.inotify = LINUX_IN_MODIFY, },
+};
+static const size_t vreg_kevent_to_inotify_len =
+    sizeof(vreg_kevent_to_inotify) / sizeof(vreg_kevent_to_inotify[0]);
 
 /*
  * Register the custom kfilter for inotify.
@@ -946,34 +990,33 @@ linux_sys_inotify_init1(struct lwp *l,
  * Convert inotify mask to the fflags of an equivalent kevent.
  */
 static uint32_t
-inotify_mask_to_kevent_fflags(uint32_t mask)
+inotify_mask_to_kevent_fflags(uint32_t mask, enum vtype type)
 {
-	uint32_t fflags = 0;
+	uint32_t fflags;
+	size_t i;
 
-	if (mask & LINUX_IN_ACCESS)
+	switch (type) {
+	case VREG:
+	case VDIR:
+	case VLNK:
+		break;
+	default:
+		return 0;
+	}
+
+	/* flags that all watches could have */
+	fflags = NOTE_DELETE|NOTE_REVOKE;
+	for (i = 0; i < common_inotify_to_kevent_len; i++)
+		if (mask & common_inotify_to_kevent[i].inotify)
+			fflags |= common_inotify_to_kevent[i].kevent;
+
+	/* flags that depend on type */
+	if (type == VREG) {
+		for (i = 0; i < vreg_inotify_to_kevent_len; i++)
+			if (mask & vreg_inotify_to_kevent[i].inotify)
+				fflags |= vreg_inotify_to_kevent[i].kevent;
+	} else if (type == VDIR && mask & LINUX_IN_ACCESS)
 		fflags |= NOTE_READ;
-	if (mask & LINUX_IN_ATTRIB)
-		fflags |= NOTE_ATTRIB;
-	if (mask & LINUX_IN_CLOSE_WRITE)
-		fflags |= NOTE_CLOSE_WRITE;
-	if (mask & LINUX_IN_CLOSE_NOWRITE)
-		fflags |= NOTE_CLOSE;
-//GTODO	if (mask & LINUX_IN_CREATE)
-//		fflags |= ;
-//GTODO	if (mask & LINUX_IN_DELETE)
-//		fflags |= ;
-	if (mask & LINUX_IN_DELETE_SELF)
-		fflags |= NOTE_DELETE;
-	if (mask & LINUX_IN_MODIFY)
-		fflags |= NOTE_WRITE;
-	if (mask & LINUX_IN_MOVE_SELF)
-		fflags |= NOTE_RENAME;
-//GTODO	if (mask & LINUX_IN_MOVED_FROM)
-//		fflags |= ;
-//GTODO	if (mask & LINUX_IN_MOVED_TO)
-//		fflags |= ;
-	if (mask & LINUX_IN_OPEN)
-		fflags |= NOTE_OPEN;
 
 	return fflags;
 }
@@ -993,11 +1036,12 @@ linux_sys_inotify_add_watch(struct lwp *l,
 		syscallarg(uint32_t) mask;
 	} */
 	int wd, error = 0;
-	file_t *fp;
+	file_t *fp, *wp;
 	struct inotifyfd *ifd;
 	struct known_fds *new_wds;
 	struct sys_open_args oa;
 	struct kevent kev;
+	enum vtype wtype;
 	struct kevent_ops k_ops = {
 		.keo_private = NULL,
 		.keo_fetch_timeout = NULL,
@@ -1036,12 +1080,17 @@ linux_sys_inotify_add_watch(struct lwp *l,
 		goto leave1;
 	wd = *retval;
 
+	wp = fd_getfile(wd);
+	KASSERT(wp != NULL);
+	wtype = wp->f_vnode->v_type;
+	fd_putfile(wd);
+
 	memset(&kev, 0, sizeof(kev));
 	EV_SET(&kev, wd, inotify_filtid, EV_ADD|EV_ENABLE,
 	    NOTE_DELETE|NOTE_REVOKE, 0, ifd);
 	if (mask & LINUX_IN_ONESHOT)
 		kev.flags |= EV_ONESHOT;
-	kev.fflags |= inotify_mask_to_kevent_fflags(mask);
+	kev.fflags |= inotify_mask_to_kevent_fflags(mask, wtype);
 
         error = kevent1(retval, ifd->ifd_kqfd, &kev, 1, NULL, 0, NULL, &k_ops);
 	if (error != 0) {
@@ -1101,6 +1150,7 @@ inotify_close_wd(struct inotifyfd *ifd, int wd)
 		DPRINTF(("%s: wd=%d is already closed\n", __func__, wd));
 		return 0;
 	}
+	KASSERT(!mutex_owned(wp->f_vnode->v_interlock));
 
 	memset(&kev, 0, sizeof(kev));
 	EV_SET(&kev, wd, EVFILT_VNODE, EV_DELETE, 0, 0, 0);
@@ -1216,42 +1266,63 @@ do_kevent_to_inotify(int32_t wd, uint32_t mask, uint32_t cookie,
  * of inotify events.
  */
 static int
-kevent_to_inotify(struct inotifyfd *ifd, int wd, uint32_t flags,
-    uint32_t fflags, struct linux_inotify_event *buf, size_t *nbuf)
+kevent_to_inotify(struct inotifyfd *ifd, int wd, enum vtype wtype,
+    uint32_t flags, uint32_t fflags, struct linux_inotify_event *buf,
+    size_t *nbuf)
 {
-	bool needs_ignored = 0;
+	struct stat st;
+	file_t *wp;
+	size_t i;
 	int error = 0;
 
-	if (fflags & NOTE_ATTRIB)
-		do_kevent_to_inotify(wd, LINUX_IN_ATTRIB, 0, buf, nbuf);
-	if (fflags & NOTE_CLOSE)
-		do_kevent_to_inotify(wd, LINUX_IN_CLOSE_NOWRITE, 0, buf, nbuf);
-	if (fflags & NOTE_CLOSE_WRITE)
-		do_kevent_to_inotify(wd, LINUX_IN_CLOSE_WRITE, 0, buf, nbuf);
-	if (fflags & NOTE_DELETE) {
-		do_kevent_to_inotify(wd, LINUX_IN_DELETE_SELF, 0, buf, nbuf);
-		needs_ignored = 1;
-	}
-	if (fflags & (NOTE_EXTEND|NOTE_WRITE))
-		do_kevent_to_inotify(wd, LINUX_IN_MODIFY, 0, buf, nbuf);
-//GTODO	if (fflags & NOTE_LINK)
-//		mask |= LINUX_IN_;
-	if (fflags & NOTE_OPEN)
-		do_kevent_to_inotify(wd, LINUX_IN_OPEN, 0, buf, nbuf);
-	if (fflags & NOTE_READ)
-		do_kevent_to_inotify(wd, LINUX_IN_ACCESS, 0, buf, nbuf);
-	if (fflags & NOTE_RENAME)
-		do_kevent_to_inotify(wd, LINUX_IN_MOVE_SELF, 0, buf, nbuf);
-	if (fflags & NOTE_REVOKE) {
-		do_kevent_to_inotify(wd, LINUX_IN_UNMOUNT, 0, buf, nbuf);
-		needs_ignored = 1;
+	for (i = 0; i < common_kevent_to_inotify_len; i++)
+		if (fflags & common_kevent_to_inotify[i].kevent)
+			do_kevent_to_inotify(wd,
+			    common_kevent_to_inotify[i].inotify, 0, buf, nbuf);
+
+	if (wtype == VREG) {
+		for (i = 0; i < vreg_kevent_to_inotify_len; i++)
+			if (fflags & vreg_kevent_to_inotify[i].kevent)
+				do_kevent_to_inotify(wd,
+				    vreg_kevent_to_inotify[i].inotify, 0,
+				    buf, nbuf);
+	} else if (wtype == VDIR) {
+		for (i = 0; i < *nbuf; i++)
+			if (buf[i].mask & (LINUX_IN_ACCESS|LINUX_IN_ATTRIB
+		            |LINUX_IN_CLOSE|LINUX_IN_OPEN))
+				buf[i].mask |= LINUX_IN_ISDIR;
+
+		if (fflags & NOTE_EXTEND) {
+			uprintf("bazinga\n");
+		}
 	}
 
-	if (flags & EV_ONESHOT)
-		needs_ignored = 1;
-	if (needs_ignored) {
+	/*
+	 * Need to check if wd is actually has a link count of 0 to
+	 * issue a LINUX_IN_DELETE_SELF
+	 */
+	if (fflags & NOTE_DELETE) {
+		wp = fd_getfile(wd);
+		KASSERT(wp != NULL);
+		vn_stat(wp->f_vnode, &st);
+		fd_putfile(wd);
+
+		if (st.st_nlink == 0)
+			do_kevent_to_inotify(wd, LINUX_IN_DELETE_SELF, 0,
+			    buf, nbuf);
+	}
+
+	/* LINUX_IN_IGNORED must be the last event issued for wd */
+	if ((flags & EV_ONESHOT) || (fflags & (NOTE_REVOKE|NOTE_DELETE))) {
 		do_kevent_to_inotify(wd, LINUX_IN_IGNORED, 0, buf, nbuf);
-		error = inotify_close_wd(ifd, wd);
+		/*
+		 * XXX in theory we could call inotify_close_wd(ifd, wd)
+		 * but if we get here we must already be holding
+		 * v_interlock for wd... so we can't.
+		 *
+		 * For simplicity we do nothing, and so wd will only
+		 * be closed when the inotify fd is closed.
+		 */
 	}
 
 	return error;
@@ -1278,15 +1349,35 @@ inotify_filt_event(struct knote *kn, long hint)
 
 	mutex_enter(&ifd->ifd_qlock);
 
+	/*
+	 * early out: there's no point even traslating the event if we
+	 * have nowhere to put it (and an LINUX_IN_Q_OVERFLOW has
+	 * already been added).
+	 */
+	if (ifd->ifd_qcount >= LINUX_INOTIFY_MAX_QUEUED)
+		goto leave;
+
 	nbuf = 0;
-	(void)kevent_to_inotify(ifd, kn->kn_id, kn->kn_flags, hint, buf, &nbuf);
-	for (i = 0; i < nbuf; i++) {
+	(void)kevent_to_inotify(ifd, kn->kn_id, vp->v_type, kn->kn_flags,
+	    hint, buf, &nbuf);
+	for (i = 0; i < nbuf && ifd->ifd_qcount < LINUX_INOTIFY_MAX_QUEUED-1;
+	     i++) {
 		tmp = kmem_zalloc(sizeof(*tmp), KM_SLEEP);
 		memcpy(&tmp->ie_event, &buf[i], sizeof(tmp->ie_event));
 
 		TAILQ_INSERT_TAIL(&ifd->ifd_q, tmp, ie_entries);
 		ifd->ifd_qcount++;
 	}
+	/* handle early overflow, by adding an overflow event to the end */
+	if (i != nbuf) {
+		tmp = kmem_zalloc(sizeof(*tmp), KM_SLEEP);
+		do_kevent_to_inotify(-1, LINUX_IN_Q_OVERFLOW, 0,
+		    &tmp->ie_event, &nbuf);
+
+		TAILQ_INSERT_TAIL(&ifd->ifd_q, tmp, ie_entries);
+		ifd->ifd_qcount++;
+	}
+
 	if (nbuf > 0) {
 		cv_broadcast(&ifd->ifd_qcv);
 
@@ -1297,6 +1388,7 @@ inotify_filt_event(struct knote *kn, long hint)
 		DPRINTF(("%s: hint=%lx resulted in 0 inotify events\n",
 		    __func__, hint));
 
+leave:
 	mutex_exit(&ifd->ifd_qlock);
 	return 0;
 }

@@ -94,6 +94,8 @@ __attribute__((packed))
 #define LINUX_IN_ISDIR		0x40000000
 #define LINUX_IN_ONESHOT	0x80000000
 
+#define LINUX_IN_CLOSE		(LINUX_IN_CLOSE_WRITE|LINUX_IN_CLOSE_NOWRITE)
+
 #define LINUX_IN_ADD_KNOWN	(LINUX_IN_ACCESS|LINUX_IN_ATTRIB \
 				|LINUX_IN_CLOSE_WRITE|LINUX_IN_CLOSE_NOWRITE \
 				|LINUX_IN_CREATE|LINUX_IN_DELETE \
@@ -102,8 +104,6 @@ __attribute__((packed))
 				|LINUX_IN_MOVED_TO|LINUX_IN_OPEN \
 				|LINUX_IN_DONT_FOLLOW|LINUX_IN_ONLYDIR)
 
-#define LINUX_NAME_MAX		255
-				
 struct linux_inotify_event {
 	int32_t		wd;
 	uint32_t	mask;
