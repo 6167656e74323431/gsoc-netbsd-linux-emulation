@@ -1035,10 +1035,12 @@ linux_sys_inotify_add_watch(struct lwp *l,
 		syscallarg(const char *) pathname;
 		syscallarg(uint32_t) mask;
 	} */
-	int wd, error = 0;
-	file_t *fp, *wp;
+	int wd, dup_of_wd, i, error = 0;
+	file_t *fp, *wp, *tmpfp;
+	struct stat wst, tmpst;
 	struct inotifyfd *ifd;
 	struct known_fds *new_wds;
+	struct knote *kn, *tmpkn;
 	struct sys_open_args oa;
 	struct kevent kev;
 	enum vtype wtype;
@@ -1065,8 +1067,8 @@ linux_sys_inotify_add_watch(struct lwp *l,
 	ifd = fp->f_data;
 
 	mutex_enter(&ifd->ifd_lock);
-	// GTODO only create a new wd if one does not exist already and handle IN_MASK_ADD/IN_MASK_CREATE
 
+	/* open a new file descriptor for the watch descriptor */
 	SCARG(&oa, path) = SCARG(uap, pathname);
 	SCARG(&oa, mode) = 0;
 	SCARG(&oa, flags) = O_RDONLY;
@@ -1083,8 +1085,12 @@ linux_sys_inotify_add_watch(struct lwp *l,
 	wp = fd_getfile(wd);
 	KASSERT(wp != NULL);
 	wtype = wp->f_vnode->v_type;
+	error = vn_stat(wp->f_vnode, &wst);
 	fd_putfile(wd);
+	if (error != 0)
+		goto leave1;
 
+	/* translate the flags */
 	memset(&kev, 0, sizeof(kev));
 	EV_SET(&kev, wd, inotify_filtid, EV_ADD|EV_ENABLE,
 	    NOTE_DELETE|NOTE_REVOKE, 0, ifd);
@@ -1092,26 +1098,110 @@ linux_sys_inotify_add_watch(struct lwp *l,
 		kev.flags |= EV_ONESHOT;
 	kev.fflags |= inotify_mask_to_kevent_fflags(mask, wtype);
 
-        error = kevent1(retval, ifd->ifd_kqfd, &kev, 1, NULL, 0, NULL, &k_ops);
-	if (error != 0) {
-		KASSERT(fd_getfile(wd) != NULL);
-		fd_close(wd);
-	} else {
-		/* Success! */
-		*retval = wd;
+	/* Check to see if we already have a descriptor to wd's file. */
+        dup_of_wd = -1;
+	for (i = 0; i < ifd->ifd_nwds; i++) {
+		if (__BITMAP_ISSET(i, ifd->ifd_wds)) {
+			tmpfp = fd_getfile(i);
+			if (tmpfp == NULL) {
+				DPRINTF(("%s: wd=%d was closed externally\n",
+				    __func__, i));
+				error = EBADF;
+				goto leave1;
+			}
+			if (tmpfp->f_type != DTYPE_VNODE) {
+				DPRINTF(("%s: wd=%d was replace with a non-vnode\n",
+				    __func__, i));
+				error = EBADF;
+			}
+			if (error != 0)
+				error = vn_stat(tmpfp->f_vnode, &tmpst);
+			fd_putfile(i);
+			if (error != 0)
+				goto leave1;
 
-		/* resize ifd_nwds to accomodate wd */
-		if (KNOWN_FDS_SIZE(wd+1) > KNOWN_FDS_SIZE(ifd->ifd_nwds)) {
-			new_wds = kmem_zalloc(KNOWN_FDS_SIZE(wd+1), KM_SLEEP);
-			memcpy(new_wds, ifd->ifd_wds, KNOWN_FDS_SIZE(ifd->ifd_nwds));
-
-			kmem_free(ifd->ifd_wds, KNOWN_FDS_SIZE(ifd->ifd_nwds));
-			ifd->ifd_wds = new_wds;
+			if (wst.st_ino == tmpst.st_ino) {
+			        dup_of_wd = i;
+				break;
+			}
 		}
-		if (wd >= ifd->ifd_nwds)
-			ifd->ifd_nwds = wd+1;
+	}
 
-		__BITMAP_SET(wd, ifd->ifd_wds);
+	if (dup_of_wd != -1) {
+		/*
+		 * If we do have a descriptor to wd's file, try to edit
+		 * the relevant knote.
+		 */
+
+		/* We do not need wd anymore. */
+		fd_getfile(wd);
+		fd_close(wd);
+
+		if (mask & LINUX_IN_MASK_CREATE) {
+			error = EEXIST;
+			goto leave1;
+		}
+
+		tmpfp = fd_getfile(dup_of_wd);
+		if (tmpfp == NULL) {
+			DPRINTF(("%s: wd=%d was closed externally (race, probably)\n",
+				__func__, dup_of_wd));
+			error = EBADF;
+			goto leave1;
+		}
+
+		mutex_enter(tmpfp->f_vnode->v_interlock);
+
+		/*
+		 * XXX We are forced to find the appropriate knote
+		 * manually because we cannot create a custom f_touch
+		 * function for inotify_filtops.  See filter_touch()
+		 * in kern_event.c for details.
+		 */
+	        SLIST_FOREACH_SAFE(kn, &tmpfp->f_vnode->v_klist->vk_klist,
+		    kn_selnext, tmpkn) {
+			if (kn->kn_fop == &inotify_filtops) {
+				mutex_enter(&kn->kn_kq->kq_lock);
+				if (mask & LINUX_IN_MASK_ADD)
+					kn->kn_sfflags |= kev.fflags;
+				else
+					kn->kn_sfflags = kev.fflags;
+				mutex_exit(&kn->kn_kq->kq_lock);
+			}
+		}
+
+		mutex_exit(tmpfp->f_vnode->v_interlock);
+		fd_putfile(dup_of_wd);
+	} else {
+		/*
+		 * If we do not have a descriptor to wd's file, we need to add
+		 * a knote.
+		 */
+		error = kevent1(retval, ifd->ifd_kqfd, &kev, 1, NULL, 0, NULL,
+		    &k_ops);
+		if (error != 0) {
+			KASSERT(fd_getfile(wd) != NULL);
+			fd_close(wd);
+		} else {
+			/* Success! */
+			*retval = wd;
+
+			/* Resize ifd_nwds to accomodate wd. */
+			if (KNOWN_FDS_SIZE(wd+1) > KNOWN_FDS_SIZE(ifd->ifd_nwds)) {
+				new_wds = kmem_zalloc(KNOWN_FDS_SIZE(wd+1),
+				    KM_SLEEP);
+				memcpy(new_wds, ifd->ifd_wds,
+				    KNOWN_FDS_SIZE(ifd->ifd_nwds));
+
+				kmem_free(ifd->ifd_wds,
+				    KNOWN_FDS_SIZE(ifd->ifd_nwds));
+				ifd->ifd_wds = new_wds;
+			}
+			if (wd >= ifd->ifd_nwds)
+				ifd->ifd_nwds = wd+1;
+
+			__BITMAP_SET(wd, ifd->ifd_wds);
+		}
 	}
 
 leave1:
