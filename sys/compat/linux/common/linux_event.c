@@ -29,6 +29,7 @@
 #include <sys/param.h>
 #include <sys/types.h>
 #include <sys/bitops.h>
+#include <sys/dirent.h>
 #include <sys/event.h>
 #include <sys/eventvar.h>
 #include <sys/errno.h>
@@ -52,22 +53,20 @@
 
 #include <compat/linux/linux_syscallargs.h>
 
-#define LINUX_EPOLL_MAX_EVENTS	(INT_MAX / sizeof(struct linux_epoll_event))
-#define LINUX_EPOLL_MAX_DEPTH	5
+#define	LINUX_EPOLL_MAX_EVENTS	(INT_MAX / sizeof(struct linux_epoll_event))
+#define	LINUX_EPOLL_MAX_DEPTH	5
 
-#define LINUX_INOTIFY_MAX_QUEUED	16384
-#define LINUX_INOTIFY_MAX_FROM_KEVENT	3
+#define	LINUX_INOTIFY_MAX_QUEUED	16384
+#define	LINUX_INOTIFY_MAX_FROM_KEVENT	3
 
-#define KNOWN_FDS_SIZE(nfds)	__BITMAP_SIZE(char, (nfds))
-
-#define kext_data	ext[0]
-#define kext_epfd	ext[1]
-#define kext_fd		ext[2]
+#define	kext_data	ext[0]
+#define	kext_epfd	ext[1]
+#define	kext_fd		ext[2]
 
 #if DEBUG_LINUX
-#define DPRINTF(x) uprintf x
+#define	DPRINTF(x) uprintf x
 #else
-#define DPRINTF(x) __nothing
+#define	DPRINTF(x) __nothing
 #endif
 
 struct epoll_copyout_args {
@@ -81,13 +80,23 @@ struct epoll_edge {
 	int fd;
 };
 
-__BITMAP_TYPE(known_fds, char, 1);
+__BITMAP_TYPE(epoll_seen, char, 1);
 
 struct inotify_entry {
 	TAILQ_ENTRY(inotify_entry)	ie_entries;
 	struct linux_inotify_event	ie_event;
 	char				ie_name[NAME_MAX+1];
 };
+
+struct inotify_dir_entries {
+	size_t	ide_count;
+	struct inotify_dir_entry {
+		char	name[NAME_MAX+1];
+		ino_t	fileno;
+	}	ide_entries[];
+};
+#define	INOTIFY_DIR_ENTRIES_SIZE(count)	sizeof(struct inotify_dir_entries) \
+					+ count * sizeof(struct inotify_dir_entry)
 
 struct inotifyfd {
 	int			ifd_kqfd;	/* kqueue fd used by this inotify */
@@ -96,12 +105,15 @@ struct inotifyfd {
 	kmutex_t		ifd_lock;	/* lock for ifd_sel, ifd_wds and */
 						/* ifd_nwds */
 
-	struct known_fds	*ifd_wds;	/* bitmap of the fds that are part of */
-						/* this inotify instance */
+	struct inotify_dir_entries **ifd_wds;	/* keeps track of the watch descriptors */
+						/* for directories: snapshot of the */
+						/* directory state */
+						/* for files: an inotify_dir_entries */
+						/* with ide_count == 0 */
 	size_t			ifd_nwds;	/* max watch descriptor that can be */
 						/* stored in ifd_wds + 1 */
 
-        TAILQ_HEAD(, inotify_entry) ifd_q;	/* queue of pending events */
+        TAILQ_HEAD(, inotify_entry) ifd_qhead;	/* queue of pending events */
 	size_t			ifd_qcount;	/* number of pending events */
 	kcondvar_t		ifd_qcv;	/* condvar for blocking reads */
 	kmutex_t		ifd_qlock;	/* lock for ifd_q* and interlock */
@@ -138,19 +150,21 @@ static int	epoll_delete_all_events(register_t *retval, int epfd,
 static int	epoll_recover_watch_tree(struct epoll_edge *edges,
 		    size_t nedges, size_t nfds);
 static int	epoll_dfs(struct epoll_edge *edges, size_t nedges,
-		    struct known_fds *seen, size_t nseen, int currfd,
+		    struct epoll_seen *seen, size_t nseen, int currfd,
 		    int depth);
 static int	epoll_check_loop_and_depth(struct lwp *l, int epfd, int fd);
 
 static int	do_inotify_init(struct lwp *l, register_t *retval, int flags);
 static int	inotify_close_wd(struct inotifyfd *ifd, int wd);
 static uint32_t	inotify_mask_to_kevent_fflags(uint32_t mask, enum vtype type);
-static void	do_kevent_to_inotify(int32_t wd, uint32_t mask, \
-		    uint32_t cookie, struct linux_inotify_event *buf, \
-		    size_t *nbuf);
-static int	kevent_to_inotify(struct inotifyfd *ifd, int wd, \
-		    enum vtype wtype, uint32_t flags, uint32_t fflags, \
-		    struct linux_inotify_event *buf, size_t *nbuf);
+static void	do_kevent_to_inotify(int32_t wd, uint32_t mask,
+		    uint32_t cookie, struct inotify_entry *buf,
+		    size_t *nbuf, char *name);
+static int	kevent_to_inotify(struct inotifyfd *ifd, int wd,
+		    enum vtype wtype, uint32_t flags, uint32_t fflags,
+		    struct inotify_entry *buf, size_t *nbuf);
+static int	inotify_readdir(file_t *fp, struct dirent *dep, int *done);
+static struct inotify_dir_entries *get_inotify_dir_entries(int wd);
 
 static int	inotify_filt_attach(struct knote *kn);
 static void	inotify_filt_detach(struct knote *kn);
@@ -158,7 +172,7 @@ static int	inotify_filt_event(struct knote *kn, long hint);
 static void	inotify_read_filt_detach(struct knote *kn);
 static int	inotify_read_filt_event(struct knote *kn, long hint);
 
-static int	inotify_read(file_t *fp, off_t *offp, struct uio *uio, \
+static int	inotify_read(file_t *fp, off_t *offp, struct uio *uio,
 		    kauth_cred_t cred, int flags);
 static int	inotify_close(file_t *fp);
 static int	inotify_poll(file_t *fp, int events);
@@ -218,6 +232,16 @@ static const struct inotify_kevent_mask_pair vreg_inotify_to_kevent[] = {
 };
 static const size_t vreg_inotify_to_kevent_len =
     sizeof(vreg_inotify_to_kevent) / sizeof(vreg_inotify_to_kevent[0]);
+
+static const struct inotify_kevent_mask_pair vdir_inotify_to_kevent[] = {
+	{ .inotify = LINUX_IN_ACCESS,		.kevent = NOTE_READ, },
+	{ .inotify = LINUX_IN_CREATE,		.kevent = NOTE_WRITE, },
+	{ .inotify = LINUX_IN_DELETE,		.kevent = NOTE_WRITE, },
+	{ .inotify = LINUX_IN_MOVED_FROM,	.kevent = NOTE_WRITE, },
+	{ .inotify = LINUX_IN_MOVED_TO,		.kevent = NOTE_WRITE, },
+};
+static const size_t vdir_inotify_to_kevent_len =
+    sizeof(vdir_inotify_to_kevent) / sizeof(vdir_inotify_to_kevent[0]);
 
 static const struct inotify_kevent_mask_pair common_kevent_to_inotify[] = {
 	{ .kevent = NOTE_ATTRIB,	.inotify = LINUX_IN_ATTRIB, },
@@ -826,7 +850,7 @@ epoll_recover_watch_tree(struct epoll_edge *edges, size_t nedges, size_t nfds) {
  * depth greater than LINUX_EPOLL_MAX_DEPTH.
  */
 static int
-epoll_dfs(struct epoll_edge *edges, size_t nedges, struct known_fds *seen,
+epoll_dfs(struct epoll_edge *edges, size_t nedges, struct epoll_seen *seen,
     size_t nseen, int currfd, int depth) {
 	int error;
 	size_t i;
@@ -869,7 +893,7 @@ epoll_check_loop_and_depth(struct lwp *l, int epfd, int fd)
 	int error;
 	file_t *fp;
 	struct epoll_edge *edges;
-	struct known_fds *seen;
+	struct epoll_seen *seen;
 	size_t nedges, nfds, seen_size;
 	bool fdirrelevant;
 
@@ -896,7 +920,7 @@ epoll_check_loop_and_depth(struct lwp *l, int epfd, int fd)
 	edges[0].epfd = epfd;
 	edges[0].fd = fd;
 
-	seen_size = KNOWN_FDS_SIZE(nfds);
+	seen_size = __BITMAP_SIZE(char, nfds);
 	seen = kmem_zalloc(seen_size, KM_SLEEP);
 
 	error = epoll_dfs(edges, nedges, seen, nfds, epfd, 0);
@@ -927,10 +951,10 @@ do_inotify_init(struct lwp *l, register_t *retval, int flags)
 	mutex_init(&ifd->ifd_qlock, MUTEX_DEFAULT, IPL_NONE);
 	cv_init(&ifd->ifd_qcv, "inotify");
 	selinit(&ifd->ifd_sel);
-	TAILQ_INIT(&ifd->ifd_q);
+	TAILQ_INIT(&ifd->ifd_qhead);
 
 	ifd->ifd_nwds = 1;
-	ifd->ifd_wds = kmem_zalloc(KNOWN_FDS_SIZE(ifd->ifd_nwds), KM_SLEEP);
+	ifd->ifd_wds = kmem_zalloc(ifd->ifd_nwds * sizeof(*ifd->ifd_wds), KM_SLEEP);
 
 	SCARG(&kqa, flags) = 0;
 	if (flags & LINUX_IN_NONBLOCK)
@@ -958,7 +982,7 @@ leave1:
 	KASSERT(fd_getfile(ifd->ifd_kqfd) != NULL);
 	fd_close(ifd->ifd_kqfd);
 leave0:
-	kmem_free(ifd->ifd_wds, KNOWN_FDS_SIZE(ifd->ifd_nwds));
+	kmem_free(ifd->ifd_wds, ifd->ifd_nwds * sizeof(*ifd->ifd_wds));
 	kmem_free(ifd, sizeof(*ifd));
 	return error;
 }
@@ -992,14 +1016,16 @@ linux_sys_inotify_init1(struct lwp *l,
 static uint32_t
 inotify_mask_to_kevent_fflags(uint32_t mask, enum vtype type)
 {
+	const struct inotify_kevent_mask_pair *type_inotify_to_kevent;
 	uint32_t fflags;
-	size_t i;
+	size_t i, type_inotify_to_kevent_len;
 
 	switch (type) {
 	case VREG:
 	case VDIR:
 	case VLNK:
 		break;
+
 	default:
 		return 0;
 	}
@@ -1011,12 +1037,24 @@ inotify_mask_to_kevent_fflags(uint32_t mask, enum vtype type)
 			fflags |= common_inotify_to_kevent[i].kevent;
 
 	/* flags that depend on type */
-	if (type == VREG) {
-		for (i = 0; i < vreg_inotify_to_kevent_len; i++)
-			if (mask & vreg_inotify_to_kevent[i].inotify)
-				fflags |= vreg_inotify_to_kevent[i].kevent;
-	} else if (type == VDIR && mask & LINUX_IN_ACCESS)
-		fflags |= NOTE_READ;
+	switch (type) {
+	case VREG:
+		type_inotify_to_kevent = vreg_inotify_to_kevent;
+		type_inotify_to_kevent_len = vreg_inotify_to_kevent_len;
+		break;
+
+	case VDIR:
+		type_inotify_to_kevent = vdir_inotify_to_kevent;
+		type_inotify_to_kevent_len = vdir_inotify_to_kevent_len;
+		break;
+
+	default:
+		type_inotify_to_kevent_len = 0;
+		break;
+	}
+	for (i = 0; i < type_inotify_to_kevent_len; i++)
+		if (mask & type_inotify_to_kevent[i].inotify)
+			fflags |= type_inotify_to_kevent[i].kevent;
 
 	return fflags;
 }
@@ -1039,7 +1077,7 @@ linux_sys_inotify_add_watch(struct lwp *l,
 	file_t *fp, *wp, *tmpfp;
 	struct stat wst, tmpst;
 	struct inotifyfd *ifd;
-	struct known_fds *new_wds;
+	struct inotify_dir_entries **new_wds;
 	struct knote *kn, *tmpkn;
 	struct sys_open_args oa;
 	struct kevent kev;
@@ -1101,7 +1139,7 @@ linux_sys_inotify_add_watch(struct lwp *l,
 	/* Check to see if we already have a descriptor to wd's file. */
         dup_of_wd = -1;
 	for (i = 0; i < ifd->ifd_nwds; i++) {
-		if (__BITMAP_ISSET(i, ifd->ifd_wds)) {
+		if (ifd->ifd_wds[i] != NULL) {
 			tmpfp = fd_getfile(i);
 			if (tmpfp == NULL) {
 				DPRINTF(("%s: wd=%d was closed externally\n",
@@ -1187,20 +1225,20 @@ linux_sys_inotify_add_watch(struct lwp *l,
 			*retval = wd;
 
 			/* Resize ifd_nwds to accomodate wd. */
-			if (KNOWN_FDS_SIZE(wd+1) > KNOWN_FDS_SIZE(ifd->ifd_nwds)) {
-				new_wds = kmem_zalloc(KNOWN_FDS_SIZE(wd+1),
-				    KM_SLEEP);
+			if (wd+1 > ifd->ifd_nwds) {
+				new_wds = kmem_zalloc(
+				    (wd+1) * sizeof(*ifd->ifd_wds), KM_SLEEP);
 				memcpy(new_wds, ifd->ifd_wds,
-				    KNOWN_FDS_SIZE(ifd->ifd_nwds));
+				    ifd->ifd_nwds * sizeof(*ifd->ifd_wds));
 
 				kmem_free(ifd->ifd_wds,
-				    KNOWN_FDS_SIZE(ifd->ifd_nwds));
-				ifd->ifd_wds = new_wds;
-			}
-			if (wd >= ifd->ifd_nwds)
-				ifd->ifd_nwds = wd+1;
+				    ifd->ifd_nwds * sizeof(*ifd->ifd_wds));
 
-			__BITMAP_SET(wd, ifd->ifd_wds);
+				ifd->ifd_wds = new_wds;
+				ifd->ifd_nwds = wd+1;
+			}
+
+			ifd->ifd_wds[wd] = get_inotify_dir_entries(wd);
 		}
 	}
 
@@ -1230,8 +1268,11 @@ inotify_close_wd(struct inotifyfd *ifd, int wd)
 
 	mutex_enter(&ifd->ifd_lock);
 
-	KASSERT(0 <= wd && wd < ifd->ifd_nwds);
-	__BITMAP_CLR(wd, ifd->ifd_wds);
+	KASSERT(0 <= wd && wd < ifd->ifd_nwds && ifd->ifd_wds[wd] != NULL);
+
+	kmem_free(ifd->ifd_wds[wd],
+	    INOTIFY_DIR_ENTRIES_SIZE(ifd->ifd_wds[wd]->ide_count));
+	ifd->ifd_wds[wd] = NULL;
 
 	mutex_exit(&ifd->ifd_lock);
 
@@ -1279,7 +1320,7 @@ linux_sys_inotify_rm_watch(struct lwp *l,
 	}
 
 	ifd = fp->f_data;
-	if (wd < 0 || wd >= ifd->ifd_nwds || !__BITMAP_ISSET(wd, ifd->ifd_wds)) {
+	if (wd < 0 || wd >= ifd->ifd_nwds || ifd->ifd_wds[wd] == NULL) {
 		error = EINVAL;
 		goto leave;
 	}
@@ -1336,7 +1377,7 @@ inotify_filt_detach(struct knote *kn)
  */
 static void
 do_kevent_to_inotify(int32_t wd, uint32_t mask, uint32_t cookie,
-    struct linux_inotify_event *buf, size_t *nbuf)
+    struct inotify_entry *buf, size_t *nbuf, char *name)
 {
 	KASSERT(*nbuf < LINUX_INOTIFY_MAX_FROM_KEVENT);
 
@@ -1344,11 +1385,134 @@ do_kevent_to_inotify(int32_t wd, uint32_t mask, uint32_t cookie,
 
 	memset(buf, 0, sizeof(*buf));
 
-	buf->wd = wd;
-	buf->mask = mask;
-	buf->cookie = cookie;
+	buf->ie_event.wd = wd;
+	buf->ie_event.mask = mask;
+	buf->ie_event.cookie = cookie;
+
+	if (name != NULL) {
+		buf->ie_event.len = strlen(name);
+		KASSERT(buf->ie_event.len < sizeof(buf->ie_name));
+		strcpy(buf->ie_name, name);
+	}
 
 	++(*nbuf);
+}
+
+/*
+ * Like vn_readdir(), but with vnode locking that depends on if we already have
+ * v_interlock (to avoid double locking in some situations).
+ */
+static int
+inotify_readdir(file_t *fp, struct dirent *dep, int *done)
+{
+	struct vnode *vp;
+	struct iovec iov;
+	struct uio uio;
+	int error, eofflag;
+
+	KASSERT(fp->f_type == DTYPE_VNODE);
+	vp = fp->f_vnode;
+	KASSERT(vp->v_type == VDIR);
+
+	iov.iov_base = dep;
+	iov.iov_len = sizeof(*dep);
+
+	uio.uio_iov = &iov;
+	uio.uio_iovcnt = 1;
+	uio.uio_rw = UIO_READ;
+	uio.uio_resid = sizeof(*dep);
+	UIO_SETUP_SYSSPACE(&uio);
+
+	mutex_enter(&fp->f_lock);
+	uio.uio_offset = fp->f_offset;
+	mutex_exit(&fp->f_lock);
+
+	if (!mutex_owned(vp->v_interlock))
+		vn_lock(vp, LK_SHARED | LK_RETRY);
+	error = VOP_READDIR(vp, &uio, fp->f_cred, &eofflag, NULL, NULL);
+	if (!mutex_owned(vp->v_interlock))
+		VOP_UNLOCK(vp);
+
+	mutex_enter(&fp->f_lock);
+	fp->f_offset = uio.uio_offset;
+	mutex_exit(&fp->f_lock);
+
+	*done = sizeof(*dep) - uio.uio_resid;
+	return error;
+}
+
+/*
+ * Create (and allocate) an appropriate inotify_dir_entries struct for wd to be
+ * used on ifd_wds of inotifyfd.  If the entries on a directory fail to be read,
+ * NULL is returned.
+ */
+static struct inotify_dir_entries *
+get_inotify_dir_entries(int wd)
+{
+	struct dirent de;
+	struct dirent *currdep;
+	struct inotify_dir_entries *idep = NULL;
+	file_t *wp;
+	int done, error;
+	size_t i, decount;
+
+	wp = fd_getfile(wd);
+	if (wp == NULL)
+		return NULL;
+	if (wp->f_type != DTYPE_VNODE)
+		goto leave;
+
+	/* for non-directories, we have 0 entries. */
+	if (wp->f_vnode->v_type != VDIR) {
+		idep = kmem_zalloc(INOTIFY_DIR_ENTRIES_SIZE(0), KM_SLEEP);
+		goto leave;
+	}
+
+	mutex_enter(&wp->f_lock);
+	wp->f_offset = 0;
+	mutex_exit(&wp->f_lock);
+	decount = 0;
+	for (;;) {
+		error = inotify_readdir(wp, &de, &done);
+		if (error != 0)
+			goto leave;
+		if (done == 0)
+			break;
+
+		currdep = &de;
+	        while ((char *)currdep < ((char *)&de) + done) {
+			decount++;
+			currdep = _DIRENT_NEXT(currdep);
+		}
+	}
+
+	idep = kmem_zalloc(INOTIFY_DIR_ENTRIES_SIZE(decount), KM_SLEEP);
+	idep->ide_count = decount;
+
+	mutex_enter(&wp->f_lock);
+	wp->f_offset = 0;
+	mutex_exit(&wp->f_lock);
+	for (i = 0; i < decount;) {
+		error = inotify_readdir(wp, &de, &done);
+		if (error != 0 || done == 0) {
+			kmem_free(idep, INOTIFY_DIR_ENTRIES_SIZE(decount));
+			idep = NULL;
+			goto leave;
+		}
+
+		currdep = &de;
+		while ((char *)currdep < ((char *)&de) + done) {
+			idep->ide_entries[i].fileno = currdep->d_fileno;
+			strcpy(idep->ide_entries[i].name, currdep->d_name);
+
+			currdep = _DIRENT_NEXT(currdep);
+			i++;
+		}
+	}
+
+leave:
+	fd_putfile(wd);
+	return idep;
 }
 
 /*
@@ -1357,10 +1521,12 @@ do_kevent_to_inotify(int32_t wd, uint32_t mask, uint32_t cookie,
  */
 static int
 kevent_to_inotify(struct inotifyfd *ifd, int wd, enum vtype wtype,
-    uint32_t flags, uint32_t fflags, struct linux_inotify_event *buf,
+    uint32_t flags, uint32_t fflags, struct inotify_entry *buf,
     size_t *nbuf)
 {
 	struct stat st;
+	struct inotify_dir_entries *old_idep, *new_idep;
+	ino_t changed;
 	file_t *wp;
 	size_t i;
 	int error = 0;
@@ -1368,50 +1534,113 @@ kevent_to_inotify(struct inotifyfd *ifd, int wd, enum vtype wtype,
 	for (i = 0; i < common_kevent_to_inotify_len; i++)
 		if (fflags & common_kevent_to_inotify[i].kevent)
 			do_kevent_to_inotify(wd,
-			    common_kevent_to_inotify[i].inotify, 0, buf, nbuf);
+			    common_kevent_to_inotify[i].inotify, 0, buf, nbuf,
+			    NULL);
 
 	if (wtype == VREG) {
 		for (i = 0; i < vreg_kevent_to_inotify_len; i++)
 			if (fflags & vreg_kevent_to_inotify[i].kevent)
 				do_kevent_to_inotify(wd,
 				    vreg_kevent_to_inotify[i].inotify, 0,
-				    buf, nbuf);
+				    buf, nbuf, NULL);
 	} else if (wtype == VDIR) {
 		for (i = 0; i < *nbuf; i++)
-			if (buf[i].mask & (LINUX_IN_ACCESS|LINUX_IN_ATTRIB
+			if (buf[i].ie_event.mask & (LINUX_IN_ACCESS|LINUX_IN_ATTRIB
 		            |LINUX_IN_CLOSE|LINUX_IN_OPEN))
-				buf[i].mask |= LINUX_IN_ISDIR;
+				buf[i].ie_event.mask |= LINUX_IN_ISDIR;
 
-		if (fflags & NOTE_EXTEND) {
-			uprintf("bazinga\n");
+		/* Need to disambiguate the possible NOTE_WRITEs. */
+		if (fflags & NOTE_WRITE) {
+			mutex_enter(&ifd->ifd_lock);
+
+			old_idep = ifd->ifd_wds[wd];
+			KASSERT(old_idep != NULL);
+			new_idep = get_inotify_dir_entries(wd);
+			if (new_idep == NULL)
+				DPRINTF(("%s: directory for wd=%d could not be read\n",
+				    __func__, wd));
+			else if (old_idep->ide_count == new_idep->ide_count) {
+				/*
+				 * XXX Because we are not watching the entire
+				 * file system, the only time we know for sure
+				 * that the event is a LINUX_IN_MOVED_FROM/
+				 * LINUX_IN_MOVED_TO is when the move happens
+				 * within a single directory...  ie. the number
+				 * of directory entries has not changed.
+				 *
+				 * Otherwise all we can say for sure is that
+				 * something was created/deleted.  So we issue a
+				 * LINUX_IN_CREATE/LINUX_IN_DELETE.
+				 */
+				changed = new_idep->ide_entries[new_idep->ide_count-1].fileno;
+
+				/* Find the deleted entry. */
+				for (i = 0; i < old_idep->ide_count; i++)
+					if (old_idep->ide_entries[i].fileno == changed)
+						break;
+			        do_kevent_to_inotify(wd, LINUX_IN_MOVED_FROM,
+				    changed, buf, nbuf,
+				    old_idep->ide_entries[i].name);
+
+				do_kevent_to_inotify(wd, LINUX_IN_MOVED_TO,
+				    changed, buf, nbuf,
+				    new_idep->ide_entries[new_idep->ide_count-1].name);
+			} else if (old_idep->ide_count < new_idep->ide_count) {
+				KASSERT(old_idep->ide_count + 1 == new_idep->ide_count);
+
+				/* Find the new entry. */
+				for (i = 0; i < old_idep->ide_count; i++)
+					if (old_idep->ide_entries[i].fileno !=
+					    new_idep->ide_entries[i].fileno)
+						break;
+
+				do_kevent_to_inotify(wd, LINUX_IN_CREATE, 0,
+				    buf, nbuf, new_idep->ide_entries[i].name);
+			} else {
+				KASSERT(old_idep->ide_count == new_idep->ide_count + 1);
+
+				/* Find the deleted entry. */
+				for (i = 0; i < new_idep->ide_count; i++)
+					if (old_idep->ide_entries[i].fileno !=
+					    new_idep->ide_entries[i].fileno)
+						break;
+
+				do_kevent_to_inotify(wd, LINUX_IN_DELETE, 0,
+				    buf, nbuf, old_idep->ide_entries[i].name);
+			}
+
+			if (new_idep != NULL)
+				ifd->ifd_wds[wd] = new_idep;
+			mutex_exit(&ifd->ifd_lock);
 		}
 	}
 
 	/*
-	 * Need to check if wd is actually has a link count of 0 to
-	 * issue a LINUX_IN_DELETE_SELF
+	 * Need to check if wd is actually has a link count of 0 to issue a
+	 * LINUX_IN_DELETE_SELF.
 	 */
 	if (fflags & NOTE_DELETE) {
 		wp = fd_getfile(wd);
 		KASSERT(wp != NULL);
+		KASSERT(wp->f_type == DTYPE_VNODE);
 		vn_stat(wp->f_vnode, &st);
 		fd_putfile(wd);
 
 		if (st.st_nlink == 0)
 			do_kevent_to_inotify(wd, LINUX_IN_DELETE_SELF, 0,
-			    buf, nbuf);
+			    buf, nbuf, NULL);
 	}
 
-	/* LINUX_IN_IGNORED must be the last event issued for wd */
+	/* LINUX_IN_IGNORED must be the last event issued for wd. */
 	if ((flags & EV_ONESHOT) || (fflags & (NOTE_REVOKE|NOTE_DELETE))) {
-		do_kevent_to_inotify(wd, LINUX_IN_IGNORED, 0, buf, nbuf);
+		do_kevent_to_inotify(wd, LINUX_IN_IGNORED, 0, buf, nbuf, NULL);
 		/*
-		 * XXX in theory we could call inotify_close_wd(ifd, wd)
-		 * but if we get here we must already be holding
-		 * v_interlock for wd... so we can't.
+		 * XXX in theory we could call inotify_close_wd(ifd, wd) but if
+		 * we get here we must already be holding v_interlock for
+		 * wd... so we can't.
 		 *
-		 * For simplicity we do nothing, and so wd will only
-		 * be closed when the inotify fd is closed.
+		 * For simplicity we do nothing, and so wd will only be closed
+		 * when the inotify fd is closed.
 		 */
 	}
 
@@ -1429,7 +1658,7 @@ inotify_filt_event(struct knote *kn, long hint)
         struct vnode *vp = (struct vnode *)kn->kn_hook;
 	struct inotify_entry *tmp;
 	size_t nbuf, i;
-	struct linux_inotify_event buf[LINUX_INOTIFY_MAX_FROM_KEVENT];
+	struct inotify_entry buf[LINUX_INOTIFY_MAX_FROM_KEVENT];
 
 	hint &= kn->kn_sfflags;
 	if (hint == 0)
@@ -1453,18 +1682,19 @@ inotify_filt_event(struct knote *kn, long hint)
 	for (i = 0; i < nbuf && ifd->ifd_qcount < LINUX_INOTIFY_MAX_QUEUED-1;
 	     i++) {
 		tmp = kmem_zalloc(sizeof(*tmp), KM_SLEEP);
-		memcpy(&tmp->ie_event, &buf[i], sizeof(tmp->ie_event));
+		memcpy(tmp, &buf[i], sizeof(*tmp));
 
-		TAILQ_INSERT_TAIL(&ifd->ifd_q, tmp, ie_entries);
+		TAILQ_INSERT_TAIL(&ifd->ifd_qhead, tmp, ie_entries);
 		ifd->ifd_qcount++;
 	}
 	/* handle early overflow, by adding an overflow event to the end */
 	if (i != nbuf) {
+		nbuf = 0;
 		tmp = kmem_zalloc(sizeof(*tmp), KM_SLEEP);
 		do_kevent_to_inotify(-1, LINUX_IN_Q_OVERFLOW, 0,
-		    &tmp->ie_event, &nbuf);
+		    tmp, &nbuf, NULL);
 
-		TAILQ_INSERT_TAIL(&ifd->ifd_q, tmp, ie_entries);
+		TAILQ_INSERT_TAIL(&ifd->ifd_qhead, tmp, ie_entries);
 		ifd->ifd_qcount++;
 	}
 
@@ -1518,10 +1748,10 @@ inotify_read(file_t *fp, off_t *offp, struct uio *uio, kauth_cred_t cred,
 
 	nread = 0;
 	while (ifd->ifd_qcount > 0) {
-		tmp = TAILQ_FIRST(&ifd->ifd_q);
+		tmp = TAILQ_FIRST(&ifd->ifd_qhead);
 		KASSERT(tmp != NULL);
 
-		tmp_size = sizeof(tmp->ie_event); // GTODO factor in (and move) name
+		tmp_size = sizeof(tmp->ie_event) + tmp->ie_event.len;
 		if (tmp_size > uio->uio_resid) {
 			if (nread == 0)
 				error = EINVAL;
@@ -1531,9 +1761,12 @@ inotify_read(file_t *fp, off_t *offp, struct uio *uio, kauth_cred_t cred,
 		error = uiomove(&tmp->ie_event, sizeof(tmp->ie_event), uio);
 		if (error != 0)
 			break;
+		error = uiomove(&tmp->ie_name, tmp->ie_event.len, uio);
+		if (error != 0)
+			break;
 
 		/* cleanup */
-		TAILQ_REMOVE(&ifd->ifd_q, tmp, ie_entries);
+		TAILQ_REMOVE(&ifd->ifd_qhead, tmp, ie_entries);
 		kmem_free(tmp, sizeof(*tmp));
 
 		nread++;
@@ -1557,7 +1790,7 @@ inotify_close(file_t *fp)
 	struct inotifyfd *ifd = fp->f_data;
 
 	for (i = 0; i < ifd->ifd_nwds; i++) {
-		if (__BITMAP_ISSET(i, ifd->ifd_wds)) {
+		if (ifd->ifd_wds[i] != NULL) {
 			error = inotify_close_wd(ifd, i);
 			if (error != 0)
 				return error;
@@ -1580,7 +1813,7 @@ inotify_close(file_t *fp)
 	cv_destroy(&ifd->ifd_qcv);
 	seldestroy(&ifd->ifd_sel);
 
-	kmem_free(ifd->ifd_wds, KNOWN_FDS_SIZE(ifd->ifd_nwds));
+	kmem_free(ifd->ifd_wds, ifd->ifd_nwds * sizeof(*ifd->ifd_wds));
 	kmem_free(ifd, sizeof(*ifd));
 	fp->f_data = NULL;
 
