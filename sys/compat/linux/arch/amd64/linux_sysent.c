@@ -1097,9 +1097,9 @@ struct sysent linux_sysent[] = {
 		.sy_call = (sy_call_t *)linux_sys_epoll_wait
 	},		/* 232 = epoll_wait */
 	{
-		ns(struct linux_sys_epoll_ctl_args),
+		ns(struct sys_epoll_ctl_args),
 		.sy_flags = SYCALL_ARG_PTR,
-		.sy_call = (sy_call_t *)linux_sys_epoll_ctl
+		.sy_call = (sy_call_t *)sys_epoll_ctl
 	},		/* 233 = epoll_ctl */
 	{
 		ns(struct linux_sys_tgkill_args),

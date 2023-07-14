@@ -606,10 +606,10 @@
 /* syscall: "exit_group" ret: "int" args: "int" */
 #define	LINUX_SYS_exit_group	231
 
-/* syscall: "epoll_wait" ret: "int" args: "int" "struct linux_epoll_event *" "int" "int" */
+/* syscall: "epoll_wait" ret: "int" args: "int" "struct epoll_event *" "int" "int" */
 #define	LINUX_SYS_epoll_wait	232
 
-/* syscall: "epoll_ctl" ret: "int" args: "int" "int" "int" "struct linux_epoll_event *" */
+/* syscall: "epoll_ctl" ret: "int" args: "int" "int" "int" "struct epoll_event *" */
 #define	LINUX_SYS_epoll_ctl	233
 
 /* syscall: "tgkill" ret: "int" args: "int" "int" "int" */
@@ -672,7 +672,7 @@
 /* syscall: "utimensat" ret: "int" args: "int" "const char *" "struct linux_timespec *" "int" */
 #define	LINUX_SYS_utimensat	280
 
-/* syscall: "epoll_pwait" ret: "int" args: "int" "struct linux_epoll_event *" "int" "int" "const linux_sigset_t *" */
+/* syscall: "epoll_pwait" ret: "int" args: "int" "struct epoll_event *" "int" "int" "const linux_sigset_t *" */
 #define	LINUX_SYS_epoll_pwait	281
 
 /* syscall: "timerfd_create" ret: "int" args: "clockid_t" "int" */
@@ -723,7 +723,7 @@
 /* syscall: "getrandom" ret: "ssize_t" args: "void *" "size_t" "unsigned int" */
 #define	LINUX_SYS_getrandom	318
 
-/* syscall: "epoll_pwait2" ret: "int" args: "int" "struct linux_epoll_event *" "int" "const struct linux_timespec *" "const linux_sigset_t *" */
+/* syscall: "epoll_pwait2" ret: "int" args: "int" "struct epoll_event *" "int" "const struct linux_timespec *" "const linux_sigset_t *" */
 #define	LINUX_SYS_epoll_pwait2	441
 
 /* syscall: "nosys" ret: "int" args: */

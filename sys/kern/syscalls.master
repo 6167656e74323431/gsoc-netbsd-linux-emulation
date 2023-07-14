@@ -1054,3 +1054,12 @@
 			    const struct kevent *changelist, size_t nchanges, \
 			    struct kevent *eventlist, size_t nevents, \
 			    const struct timespec *timeout); }
+501	STD		{ int|sys||memfd_create(const char *name, \
+			    unsigned int flags); }
+502	STD		{ int|sys||epoll_create1(int flags); }
+503	STD		{ int|sys||epoll_ctl(int epfd, int op, int fd, \
+			    struct epoll_event *event); }
+504	STD		{ int|sys||epoll_pwait2(int epfd, \
+			    struct epoll_event *events, int maxevents, \
+			    const struct timespec *timeout, \
+			    const sigset_t *sigmask); }

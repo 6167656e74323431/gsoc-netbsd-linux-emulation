@@ -8611,21 +8611,17 @@ struct sysent rump_sysent[] = {
 		.sy_call = (sy_call_t *)(void *)rumpns_enosys,
 	},		/* 500 = __kevent100 */
 	{
-		.sy_flags = SYCALL_NOSYS,
 		.sy_call = (sy_call_t *)(void *)rumpns_enosys,
-	},		/* 501 = filler */
+},		/* 501 = memfd_create */
 	{
-		.sy_flags = SYCALL_NOSYS,
 		.sy_call = (sy_call_t *)(void *)rumpns_enosys,
-	},		/* 502 = filler */
+},		/* 502 = epoll_create1 */
 	{
-		.sy_flags = SYCALL_NOSYS,
 		.sy_call = (sy_call_t *)(void *)rumpns_enosys,
-	},		/* 503 = filler */
+},		/* 503 = epoll_ctl */
 	{
-		.sy_flags = SYCALL_NOSYS,
 		.sy_call = (sy_call_t *)(void *)rumpns_enosys,
-	},		/* 504 = filler */
+},		/* 504 = epoll_pwait2 */
 	{
 		.sy_flags = SYCALL_NOSYS,
 		.sy_call = (sy_call_t *)(void *)rumpns_enosys,
