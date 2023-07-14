@@ -443,10 +443,10 @@
 			    struct linux_timespec *rmtp); }
 231	STD		{ int|linux_sys||exit_group(int error_code); }
 232	STD		{ int|linux_sys||epoll_wait(int epfd, \
-			    struct linux_epoll_event *events, int maxevents, \
+			    struct epoll_event *events, int maxevents, \
 			    int timeout); }
-233	STD		{ int|linux_sys||epoll_ctl(int epfd, int op, int fd, \
-			    struct linux_epoll_event *event); }
+233	NOARGS		{ int|sys||epoll_ctl(int epfd, int op, int fd, \
+			    struct epoll_event *event); }
 234	STD		{ int|linux_sys||tgkill(int tgid, int tid, int sig); }
 235	NOARGS		{ int|compat_50_sys||utimes(const char *path, \
 			    const struct timeval50 *tptr); }
@@ -523,7 +523,7 @@
 280	STD		{ int|linux_sys||utimensat(int fd, const char *path, \
 			    struct linux_timespec *times, int flag); }
 281	STD		{ int|linux_sys||epoll_pwait(int epfd, \
-			    struct linux_epoll_event *events, int maxevents, \
+			    struct epoll_event *events, int maxevents, \
 			    int timeout, const linux_sigset_t *sigmask); }
 282	UNIMPL		signalfd
 283	STD		{ int|linux_sys||timerfd_create(clockid_t clock_id, \
@@ -704,7 +704,7 @@
 439	UNIMPL		faccessat2
 440	UNIMPL		process_madvise
 441	STD		{ int|linux_sys||epoll_pwait2(int epfd, \
-			    struct linux_epoll_event *events, int maxevents, \
+			    struct epoll_event *events, int maxevents, \
 			    const struct linux_timespec *timeout, \
 			    const linux_sigset_t *sigmask); }
 442	UNIMPL		mount_setattr

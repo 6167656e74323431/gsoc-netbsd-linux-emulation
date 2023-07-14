@@ -7,10 +7,10 @@
 # other sources shared with the kernel, used in syscalls
 SRCS+=	cpuset.c
 # glue to offer userland wrappers for some syscalls
-SRCS+=	accept4.c clock_getcpuclockid.c eventfd_read.c eventfd_write.c \
-	posix_fadvise.c posix_madvise.c ppoll.c sched.c sigqueue.c \
-	sigtimedwait.c sigwait.c sigwaitinfo.c statvfs.c swapon.c semctl.c \
-	vadvise.c
+SRCS+=	accept4.c clock_getcpuclockid.c epoll.c eventfd_read.c \
+	eventfd_write.c posix_fadvise.c posix_madvise.c ppoll.c sched.c \
+	sigqueue.c sigtimedwait.c sigwait.c sigwaitinfo.c statvfs.c swapon.c \
+	semctl.c vadvise.c
 
 .if ${RUMPRUN} != "yes"
 # modules with non-default implementations on at least one architecture:
@@ -103,6 +103,7 @@ ASM=\
 		clock_getcpuclockid2.S \
 		__clock_getres50.S __clock_gettime50.S \
 	dup.S dup2.S dup3.S \
+	epoll_create1.S epoll_ctl.S epoll_pwait2.S \
 	eventfd.S \
 	extattrctl.S \
 		extattr_delete_fd.S extattr_delete_file.S \

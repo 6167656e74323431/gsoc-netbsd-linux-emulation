@@ -29,6 +29,7 @@
 #include <sys/param.h>
 #include <sys/types.h>
 #include <sys/bitops.h>
+#include <sys/epoll.h>
 #include <sys/event.h>
 #include <sys/eventvar.h>
 #include <sys/errno.h>
@@ -41,29 +42,26 @@
 
 #include <sys/syscallargs.h>
 
-#include <compat/linux/common/linux_machdep.h>
-#include <compat/linux/common/linux_event.h>
-#include <compat/linux/common/linux_fcntl.h>
-#include <compat/linux/common/linux_sched.h>
-#include <compat/linux/common/linux_signal.h>
+#define	EPOLL_MAX_EVENTS	(INT_MAX / sizeof(struct epoll_event))
+#define	EPOLL_MAX_DEPTH		5
 
-#include <compat/linux/linux_syscallargs.h>
+#define	EPOLL_EVRD	(EPOLLIN|EPOLLRDNORM)
+#define	EPOLL_EVWR	(EPOLLOUT|EPOLLWRNORM)
+#define	EPOLL_EVSUP	(EPOLLET|EPOLLONESHOT|EPOLLHUP|EPOLLERR|EPOLLPRI \
+			|EPOLL_EVRD|EPOLL_EVWR|EPOLLRDHUP)
 
-#define LINUX_EPOLL_MAX_EVENTS	(INT_MAX / sizeof(struct linux_epoll_event))
-#define LINUX_EPOLL_MAX_DEPTH	5
+#define	kext_data	ext[0]
+#define	kext_epfd	ext[1]
+#define	kext_fd		ext[2]
 
-#define kext_data	ext[0]
-#define kext_epfd	ext[1]
-#define kext_fd		ext[2]
-
-#if DEBUG_LINUX
-#define DPRINTF(x) uprintf x
+#if DEBUG
+#define	DPRINTF(x) uprintf x
 #else
-#define DPRINTF(x)
+#define	DPRINTF(x) __nothing
 #endif
 
 struct epoll_copyout_args {
-	struct linux_epoll_event *leventlist;
+	struct epoll_event *leventlist;
 	int			 count;
 	int			 error;
 };
@@ -76,21 +74,15 @@ struct epoll_edge {
 __BITMAP_TYPE(epoll_seen, char, 1);
 
 static int	epoll_to_kevent(int epfd, int fd,
-		    struct linux_epoll_event *l_event, struct kevent *kevent,
+		    struct epoll_event *l_event, struct kevent *kevent,
 		    int *nkevents);
 static void	kevent_to_epoll(struct kevent *kevent,
-		    struct linux_epoll_event *l_event);
+		    struct epoll_event *l_event);
 static int      epoll_kev_put_events(void *ctx, struct kevent *events,
 		    struct kevent *eventlist, size_t index, int n);
 static int	epoll_kev_fetch_changes(void *ctx, const struct kevent *changelist,
 		    struct kevent *changes, size_t index, int n);
 static int	epoll_kev_fetch_timeout(const void *src, void *dest, size_t size);
-static int	epoll_wait_ts(struct lwp *l, register_t *retval, int epfd,
-		    struct linux_epoll_event *events, int maxevents,
-		    struct timespec *tsp, const linux_sigset_t *lssp);
-static int	epoll_wait_common(struct lwp *l, register_t *retval,
-		    int epfd, struct linux_epoll_event *events, int maxevents,
-		    int timeout, const linux_sigset_t *lssp);
 static int	epoll_register_kevent(register_t *retval, int epfd,
 		    int fd, int filter, unsigned int flags);
 static int	epoll_fd_registered(register_t *retval, int epfd,
@@ -105,42 +97,20 @@ static int	epoll_dfs(struct epoll_edge *edges, size_t nedges,
 static int	epoll_check_loop_and_depth(struct lwp *l, int epfd, int fd);
 
 /*
- * epoll_create(2).  Just create a kqueue instance.
- */
-int
-linux_sys_epoll_create(struct lwp *l, const struct linux_sys_epoll_create_args *uap, register_t *retval)
-{
-	/* {
-		syscallarg(int) size;
-	} */
-
-	/*
-	 * args->size is unused. Linux just tests it
-	 * and then forgets it as well.
-	 */
-	if (SCARG(uap, size) <= 0)
-		return EINVAL;
-
-	return sys_kqueue(l, NULL, retval);
-}
-
-/*
  * epoll_create1(2).  Parse the flags and then create a kqueue instance.
  */
 int
-linux_sys_epoll_create1(struct lwp *l, const struct linux_sys_epoll_create1_args *uap, register_t *retval)
+sys_epoll_create1(struct lwp *l, const struct sys_epoll_create1_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(int) flags;
 	} */
 	struct sys_kqueue1_args kqa;
 
-	if ((SCARG(uap, flags) & ~(LINUX_O_CLOEXEC)) != 0)
+	if ((SCARG(uap, flags) & ~(O_CLOEXEC)) != 0)
 		return EINVAL;
 
-	SCARG(&kqa, flags) = 0;
-	if ((SCARG(uap, flags) & LINUX_O_CLOEXEC) != 0)
-		SCARG(&kqa, flags) |= O_CLOEXEC;
+	SCARG(&kqa, flags) = SCARG(uap, flags);
 
 	return sys_kqueue1(l, &kqa, retval);
 }
@@ -149,24 +119,24 @@ linux_sys_epoll_create1(struct lwp *l, const struct linux_sys_epoll_create1_args
  * Structure converting function from epoll to kevent.
  */
 static int
-epoll_to_kevent(int epfd, int fd, struct linux_epoll_event *l_event,
+epoll_to_kevent(int epfd, int fd, struct epoll_event *l_event,
     struct kevent *kevent, int *nkevents)
 {
 	uint32_t levents = l_event->events;
 	uint32_t kev_flags = EV_ADD | EV_ENABLE;
 
 	/* flags related to how event is registered */
-	if ((levents & LINUX_EPOLLONESHOT) != 0)
+	if ((levents & EPOLLONESHOT) != 0)
 		kev_flags |= EV_DISPATCH;
-	if ((levents & LINUX_EPOLLET) != 0)
+	if ((levents & EPOLLET) != 0)
 		kev_flags |= EV_CLEAR;
-	if ((levents & LINUX_EPOLLERR) != 0)
+	if ((levents & EPOLLERR) != 0)
 		kev_flags |= EV_ERROR;
-	if ((levents & LINUX_EPOLLRDHUP) != 0)
+	if ((levents & EPOLLRDHUP) != 0)
 		kev_flags |= EV_EOF;
 
 	/* flags related to what event is registered */
-	if ((levents & LINUX_EPOLL_EVRD) != 0) {
+	if ((levents & EPOLL_EVRD) != 0) {
 		EV_SET(kevent, fd, EVFILT_READ, kev_flags, 0, 0, 0);
 		kevent->kext_data = l_event->data;
 		kevent->kext_epfd = epfd;
@@ -174,7 +144,7 @@ epoll_to_kevent(int epfd, int fd, struct linux_epoll_event *l_event,
 		++kevent;
 		++(*nkevents);
 	}
-	if ((levents & LINUX_EPOLL_EVWR) != 0) {
+	if ((levents & EPOLL_EVWR) != 0) {
 		EV_SET(kevent, fd, EVFILT_WRITE, kev_flags, 0, 0, 0);
 		kevent->kext_data = l_event->data;
 		kevent->kext_epfd = epfd;
@@ -183,12 +153,12 @@ epoll_to_kevent(int epfd, int fd, struct linux_epoll_event *l_event,
 		++(*nkevents);
 	}
 	/* zero event mask is legal */
-	if ((levents & (LINUX_EPOLL_EVRD | LINUX_EPOLL_EVWR)) == 0) {
+	if ((levents & (EPOLL_EVRD | EPOLL_EVWR)) == 0) {
 		EV_SET(kevent++, fd, EVFILT_READ, EV_ADD|EV_DISABLE, 0, 0, 0);
 		++(*nkevents);
 	}
 
-	if ((levents & ~(LINUX_EPOLL_EVSUP)) != 0) {
+	if ((levents & ~(EPOLL_EVSUP)) != 0) {
 		return EINVAL;
 	}
 
@@ -198,28 +168,28 @@ epoll_to_kevent(int epfd, int fd, struct linux_epoll_event *l_event,
 /*
  * Structure converting function from kevent to epoll. In a case
  * this is called on error in registration we store the error in
- * event->data and pick it up later in linux_sys_epoll_ctl().
+ * event->data and pick it up later in sys_epoll_ctl().
  */
 static void
-kevent_to_epoll(struct kevent *kevent, struct linux_epoll_event *l_event)
+kevent_to_epoll(struct kevent *kevent, struct epoll_event *l_event)
 {
 
 	l_event->data = kevent->kext_data;
 
 	if ((kevent->flags & EV_ERROR) != 0) {
-		l_event->events = LINUX_EPOLLERR;
+		l_event->events = EPOLLERR;
 		return;
 	}
 
 	/* XXX EPOLLPRI, EPOLLHUP */
 	switch (kevent->filter) {
 	case EVFILT_READ:
-		l_event->events = LINUX_EPOLLIN;
+		l_event->events = EPOLLIN;
 		if ((kevent->flags & EV_EOF) != 0)
-			l_event->events |= LINUX_EPOLLRDHUP;
+			l_event->events |= EPOLLRDHUP;
 		break;
 	case EVFILT_WRITE:
-		l_event->events = LINUX_EPOLLOUT;
+		l_event->events = EPOLLOUT;
 		break;
 	default:
 		DPRINTF(("kevent_to_epoll: unhandled kevent filter %d\n",
@@ -239,11 +209,11 @@ epoll_kev_put_events(void *ctx, struct kevent *events,
     struct kevent *eventlist, size_t index, int n)
 {
 	struct epoll_copyout_args *args;
-	struct linux_epoll_event *eep;
+	struct epoll_event *eep;
 	int error, i;
 	size_t levent_size = sizeof(*eep) * n;
 
-	KASSERT(n >= 0 && n < LINUX_EPOLL_MAX_EVENTS);
+	KASSERT(n >= 0 && n < EPOLL_MAX_EVENTS);
 
 	args = (struct epoll_copyout_args *)ctx;
 	eep = kmem_alloc(levent_size, KM_SLEEP);
@@ -272,7 +242,7 @@ static int
 epoll_kev_fetch_changes(void *ctx, const struct kevent *changelist,
     struct kevent *changes, size_t index, int n)
 {
-	KASSERT(n >= 0 && n < LINUX_EPOLL_MAX_EVENTS);
+	KASSERT(n >= 0 && n < EPOLL_MAX_EVENTS);
 
 	memcpy(changes, changelist + index, n * sizeof(*changes));
 
@@ -297,16 +267,16 @@ epoll_kev_fetch_timeout(const void *src, void *dest, size_t size)
  * and load it into kevent subsystem.
  */
 int
-linux_sys_epoll_ctl(struct lwp *l, const struct linux_sys_epoll_ctl_args *uap, register_t *retval)
+sys_epoll_ctl(struct lwp *l, const struct sys_epoll_ctl_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(int) epfd;
 		syscallarg(int) op;
 		syscallarg(int) fd;
-		syscallarg(struct linux_epoll_event *) event;
+		syscallarg(struct epoll_event *) event;
 	} */
 	struct kevent kev[2];
-	struct linux_epoll_event le;
+	struct epoll_event le;
         struct kevent_ops k_ops = {
 		.keo_private = NULL,
 		.keo_fetch_timeout = NULL,
@@ -320,7 +290,7 @@ linux_sys_epoll_ctl(struct lwp *l, const struct linux_sys_epoll_ctl_args *uap, r
 	const int op = SCARG(uap, op);
 	const int fd = SCARG(uap, fd);
 
-	if (op != LINUX_EPOLL_CTL_DEL) {
+	if (op != EPOLL_CTL_DEL) {
 		error = copyin(SCARG(uap, event), &le, sizeof(le));
 		if (error != 0)
 			return error;
@@ -362,20 +332,20 @@ linux_sys_epoll_ctl(struct lwp *l, const struct linux_sys_epoll_ctl_args *uap, r
 		return EINVAL;
 	}
 
-	if (op != LINUX_EPOLL_CTL_DEL) {
+	if (op != EPOLL_CTL_DEL) {
 		error = epoll_to_kevent(epfd, fd, &le, kev, &nchanges);
 		if (error != 0)
 			return error;
 	}
 
 	switch (op) {
-	case LINUX_EPOLL_CTL_MOD:
+	case EPOLL_CTL_MOD:
 		error = epoll_delete_all_events(retval, epfd, fd);
 		if (error != 0)
 			return error;
 		break;
 
-	case LINUX_EPOLL_CTL_ADD:
+	case EPOLL_CTL_ADD:
 		if (epoll_fd_registered(retval, epfd, fd))
 			return EEXIST;
 		error = epoll_check_loop_and_depth(l, epfd, fd);
@@ -383,12 +353,12 @@ linux_sys_epoll_ctl(struct lwp *l, const struct linux_sys_epoll_ctl_args *uap, r
 			return error;
 		break;
 
-	case LINUX_EPOLL_CTL_DEL:
+	case EPOLL_CTL_DEL:
 		/* CTL_DEL means unregister this fd with this epoll */
 		return epoll_delete_all_events(retval, epfd, fd);
 
 	default:
-		DPRINTF(("linux_sys_epoll_ctl: invalid op %d\n", op));
+		DPRINTF(("sys_epoll_ctl: invalid op %d\n", op));
 		return EINVAL;
 	}
 
@@ -404,11 +374,13 @@ linux_sys_epoll_ctl(struct lwp *l, const struct linux_sys_epoll_ctl_args *uap, r
 /*
  * Wait for a filter to be triggered on the epoll file descriptor.
  * All of the epoll_*wait* syscalls eventually end up here.
+ *
+ * nss and ssp must point to kernel memory (or be NULL).
  */
-static int
-epoll_wait_ts(struct lwp *l, register_t *retval, int epfd,
-    struct linux_epoll_event *events, int maxevents, struct timespec *tsp,
-    const linux_sigset_t *lssp)
+int
+epoll_wait_common(struct lwp *l, register_t *retval, int epfd,
+    struct epoll_event *events, int maxevents, struct timespec *tsp,
+    const sigset_t *nssp)
 {
 	struct epoll_copyout_args coargs;
 	struct kevent_ops k_ops = {
@@ -419,11 +391,10 @@ epoll_wait_ts(struct lwp *l, register_t *retval, int epfd,
 	};
 	struct proc *p = l->l_proc;
 	file_t *epfp;
-	sigset_t nss, oss;
-	linux_sigset_t lss;
+	sigset_t oss;
 	int error = 0;
 
-	if (maxevents <= 0 || maxevents > LINUX_EPOLL_MAX_EVENTS)
+	if (maxevents <= 0 || maxevents > EPOLL_MAX_EVENTS)
 		return EINVAL;
 
 	/* Need to validate epfd separately from kevent1 to match
@@ -437,15 +408,9 @@ epoll_wait_ts(struct lwp *l, register_t *retval, int epfd,
 	if (error != 0)
 		return error;
 
-	if (lssp != NULL) {
-		error = copyin(lssp, &lss, sizeof(lss));
-		if (error != 0)
-			return error;
-		
-		linux_to_native_sigset(&nss, &lss);
-
+	if (nssp != NULL) {
 		mutex_enter(p->p_lock);
-		error = sigprocmask1(l, SIG_SETMASK, &nss, &oss);
+		error = sigprocmask1(l, SIG_SETMASK, nssp, &oss);
 		mutex_exit(p->p_lock);
 		if (error != 0)
 			return error;
@@ -466,7 +431,7 @@ epoll_wait_ts(struct lwp *l, register_t *retval, int epfd,
 	if (error == 0)
 		*retval = coargs.count;
 
-	if (lssp != NULL) {
+	if (nssp != NULL) {
 	        mutex_enter(p->p_lock);
 		error = sigprocmask1(l, SIG_SETMASK, &oss, NULL);
 		mutex_exit(p->p_lock);
@@ -476,96 +441,42 @@ epoll_wait_ts(struct lwp *l, register_t *retval, int epfd,
 }
 
 /*
- * Convert timeout to a timespec and then call epoll_wait_ts.
- */
-static int
-epoll_wait_common(struct lwp *l, register_t *retval, int epfd,
-    struct linux_epoll_event *events, int maxevents, int timeout,
-    const linux_sigset_t *lssp)
-{
-	struct timespec ts, *tsp;
-
-	/*
-	 * Linux epoll_wait(2) man page states that timeout of -1 causes caller
-	 * to block indefinitely. Real implementation does it if any negative
-	 * timeout value is passed.
-	 */
-	if (timeout >= 0) {
-		/* Convert from milliseconds to timespec. */
-		ts.tv_sec = timeout / 1000;
-		ts.tv_nsec = (timeout % 1000) * 1000000;
-		tsp = &ts;
-	} else {
-		tsp = NULL;
-	}
-	return epoll_wait_ts(l, retval, epfd, events, maxevents, tsp, lssp);
-}
-
-/*
- * epoll_wait(2).
- */
-int
-linux_sys_epoll_wait(struct lwp *l, const struct linux_sys_epoll_wait_args *uap, register_t *retval)
-{
-	/* {
-		syscallarg(int) epfd;
-		syscallarg(struct linux_epoll_event *) events;
-		syscallarg(int) maxevents;
-		syscallarg(int) timeout;
-	} */
-
-	return epoll_wait_common(l, retval, SCARG(uap, epfd), SCARG(uap, events),
-	    SCARG(uap, maxevents), SCARG(uap, timeout), NULL);
-}
-
-/*
- * epoll_pwait(2).
- */
-int
-linux_sys_epoll_pwait(struct lwp *l, const struct linux_sys_epoll_pwait_args *uap, register_t *retval)
-{
-	/* {
-		syscallarg(int) epfd;
-		syscallarg(struct linux_epoll_event *) events;
-		syscallarg(int) maxevents;
-		syscallarg(int) timeout;
-		syscallarg(linux_sigset_t *) sigmask;
-	} */
-
-	return epoll_wait_common(l, retval, SCARG(uap, epfd), SCARG(uap, events),
-	    SCARG(uap, maxevents), SCARG(uap, timeout), SCARG(uap, sigmask));
-}
-
-/*
  * epoll_pwait2(2).
  */
 int
-linux_sys_epoll_pwait2(struct lwp *l, const struct linux_sys_epoll_pwait2_args *uap, register_t *retval)
+sys_epoll_pwait2(struct lwp *l, const struct sys_epoll_pwait2_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(int) epfd;
-		syscallarg(struct linux_epoll_event *) events;
+		syscallarg(struct epoll_event *) events;
 		syscallarg(int) maxevents;
-		syscallarg(struct linux_timespec *) timeout;
-		syscallarg(linux_sigset_t *) sigmask;
+		syscallarg(struct timespec *) timeout;
+		syscallarg(sigset_t *) sigmask;
 	} */
 	struct timespec ts, *tsp;
-	struct linux_timespec lts;
+	sigset_t ss, *ssp;
 	int error;
 
 	if (SCARG(uap, timeout) != NULL) {
-		error = copyin(SCARG(uap, timeout), &lts, sizeof(lts));
+		error = copyin(SCARG(uap, timeout), &ts, sizeof(ts));
 		if (error != 0)
 			return error;
 
-		linux_to_native_timespec(&ts, &lts);
 		tsp = &ts;
 	} else
 		tsp = NULL;
 
-	return epoll_wait_ts(l, retval, SCARG(uap, epfd),
-	    SCARG(uap, events), SCARG(uap, maxevents), tsp,
-	    SCARG(uap, sigmask));
+	if (SCARG(uap, sigmask) != NULL) {
+		error = copyin(SCARG(uap, sigmask), &ss, sizeof(ss));
+		if (error != 0)
+			return error;
+
+		ssp = &ss;
+	} else
+		ssp = NULL;
+
+	return epoll_wait_common(l, retval, SCARG(uap, epfd),
+	    SCARG(uap, events), SCARG(uap, maxevents), tsp, ssp);
 }
 
 /*
@@ -670,7 +581,7 @@ epoll_recover_watch_tree(struct epoll_edge *edges, size_t nedges, size_t nfds) {
 
 /*
  * Run dfs on the graph described by edges, checking for loops and a
- * depth greater than LINUX_EPOLL_MAX_DEPTH.
+ * depth greater than EPOLL_MAX_DEPTH.
  */
 static int
 epoll_dfs(struct epoll_edge *edges, size_t nedges, struct epoll_seen *seen,
@@ -682,7 +593,7 @@ epoll_dfs(struct epoll_edge *edges, size_t nedges, struct epoll_seen *seen,
 	KASSERT(seen != NULL);
 	KASSERT(nedges > 0);
 	KASSERT(currfd < nseen);
-	KASSERT(0 <= depth && depth <= LINUX_EPOLL_MAX_DEPTH + 1);
+	KASSERT(0 <= depth && depth <= EPOLL_MAX_DEPTH + 1);
 
 	if (__BITMAP_ISSET(currfd, seen))
 		return ELOOP;
@@ -690,7 +601,7 @@ epoll_dfs(struct epoll_edge *edges, size_t nedges, struct epoll_seen *seen,
 	__BITMAP_SET(currfd, seen);
 
 	depth++;
-	if (depth > LINUX_EPOLL_MAX_DEPTH)
+	if (depth > EPOLL_MAX_DEPTH)
 		return EINVAL;
 
 	for (i = 0; i < nedges; i++) {

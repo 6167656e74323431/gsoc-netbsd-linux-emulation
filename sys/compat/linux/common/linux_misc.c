@@ -64,6 +64,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux_misc.c,v 1.256 2021/12/02 04:29:48 ryo Exp $")
 #include <sys/namei.h>
 #include <sys/proc.h>
 #include <sys/dirent.h>
+#include <sys/epoll.h>
 #include <sys/eventfd.h>
 #include <sys/file.h>
 #include <sys/stat.h>
@@ -1827,4 +1828,165 @@ linux_sys_memfd_create(struct lwp *l, const struct linux_sys_memfd_create_args *
 	SCARG(&muap, flags) = lflags & LINUX_MFD_KNOWN_FLAGS;
 
 	return sys_memfd_create(l, &muap, retval);
+}
+
+/*
+ * epoll_create(2).  Check size and call sys_epoll_create1.
+ */
+int
+linux_sys_epoll_create(struct lwp *l,
+    const struct linux_sys_epoll_create_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) size;
+	} */
+	struct sys_epoll_create1_args ca;
+
+	/*
+	 * SCARG(uap, size) is unused.  Linux just tests it and then
+	 * forgets it as well.
+	 */
+	if (SCARG(uap, size) <= 0)
+		return EINVAL;
+
+	SCARG(&ca, flags) = 0;
+	return sys_epoll_create1(l, &ca, retval);
+}
+
+/*
+ * epoll_create1(2).  Translate the flags and call sys_epoll_create1.
+ */
+int
+linux_sys_epoll_create1(struct lwp *l,
+    const struct linux_sys_epoll_create1_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) flags;
+	} */
+	struct sys_epoll_create1_args ca;
+
+        if ((SCARG(uap, flags) & ~(LINUX_O_CLOEXEC)) != 0)
+		return EINVAL;
+
+	SCARG(&ca, flags) = 0;
+	if ((SCARG(uap, flags) & LINUX_O_CLOEXEC) != 0)
+		SCARG(&ca, flags) |= O_CLOEXEC;
+
+	return sys_epoll_create1(l, &ca, retval);
+}
+
+/*
+ * epoll_wait(2).  Translate timeout and call epoll_wait_common.
+ */
+int
+linux_sys_epoll_wait(struct lwp *l,
+    const struct linux_sys_epoll_wait_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) epfd;
+		syscallarg(struct epoll_event *) events;
+		syscallarg(int) maxevents;
+		syscallarg(int) timeout;
+	} */
+	struct timespec ts, *tsp;
+	const int timeout = SCARG(uap, timeout);
+
+	if (timeout >= 0) {
+		/* Convert from milliseconds to timespec. */
+		ts.tv_sec = timeout / 1000;
+		ts.tv_nsec = (timeout % 1000) * 1000000;
+
+		tsp = &ts;
+	} else
+		tsp = NULL;
+
+	return epoll_wait_common(l, retval, SCARG(uap, epfd),
+	    SCARG(uap, events), SCARG(uap, maxevents), tsp, NULL);
+}
+
+/*
+ * epoll_pwait(2).  Translate timeout and sigmask and call epoll_wait_common.
+ */
+int
+linux_sys_epoll_pwait(struct lwp *l,
+    const struct linux_sys_epoll_pwait_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) epfd;
+		syscallarg(struct epoll_event *) events;
+		syscallarg(int) maxevents;
+		syscallarg(int) timeout;
+		syscallarg(linux_sigset_t *) sigmask;
+	} */
+        struct timespec ts, *tsp;
+	const int timeout = SCARG(uap, timeout);
+	linux_sigset_t lss;
+	sigset_t ss, *ssp;
+	int error;
+
+	if (timeout >= 0) {
+		/* Convert from milliseconds to timespec. */
+		ts.tv_sec = timeout / 1000;
+		ts.tv_nsec = (timeout % 1000) * 1000000;
+
+		tsp = &ts;
+	} else
+		tsp = NULL;
+
+	if (SCARG(uap, sigmask) != NULL) {
+		error = copyin(SCARG(uap, sigmask), &lss, sizeof(lss));
+		if (error != 0)
+			return error;
+
+		linux_to_native_sigset(&ss, &lss);
+		ssp = &ss;
+	} else
+		ssp = NULL;
+
+        return epoll_wait_common(l, retval, SCARG(uap, epfd),
+	    SCARG(uap, events), SCARG(uap, maxevents), tsp, ssp);
+}
+
+/*
+ * epoll_pwait(2).  Translate timeout and sigmask and call epoll_wait_common.
+ */
+int
+linux_sys_epoll_pwait2(struct lwp *l,
+    const struct linux_sys_epoll_pwait2_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) epfd;
+		syscallarg(struct epoll_event *) events;
+		syscallarg(int) maxevents;
+	        syscallarg(struct linux_timespec *) timeout;
+		syscallarg(linux_sigset_t *) sigmask;
+	} */
+	struct linux_timespec lts;
+	struct timespec ts, *tsp;
+	linux_sigset_t lss;
+	sigset_t ss, *ssp;
+	int error;
+
+	if (SCARG(uap, timeout) != NULL) {
+		error = copyin(SCARG(uap, timeout), &lts, sizeof(lts));
+		if (error != 0)
+			return error;
+
+		linux_to_native_timespec(&ts, &lts);
+		tsp = &ts;
+	} else
+		tsp = NULL;
+
+	if (SCARG(uap, sigmask) != NULL) {
+		error = copyin(SCARG(uap, sigmask), &lss, sizeof(lss));
+		if (error != 0)
+			return error;
+
+		linux_to_native_sigset(&ss, &lss);
+		ssp = &ss;
+	} else
+		ssp = NULL;
+
+	return epoll_wait_common(l, retval, SCARG(uap, epfd),
+	    SCARG(uap, events), SCARG(uap, maxevents), tsp, ssp);
 }

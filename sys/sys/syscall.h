@@ -1410,6 +1410,15 @@
 /* syscall: "memfd_create" ret: "int" args: "const char *" "unsigned int" */
 #define	SYS_memfd_create	501
 
-#define	SYS_MAXSYSCALL	502
+/* syscall: "epoll_create1" ret: "int" args: "int" */
+#define	SYS_epoll_create1	502
+
+/* syscall: "epoll_ctl" ret: "int" args: "int" "int" "int" "struct epoll_event *" */
+#define	SYS_epoll_ctl	503
+
+/* syscall: "epoll_pwait2" ret: "int" args: "int" "struct epoll_event *" "int" "const struct timespec *" "const sigset_t *" */
+#define	SYS_epoll_pwait2	504
+
+#define	SYS_MAXSYSCALL	505
 #define	SYS_NSYSENT	512
 #endif /* _SYS_SYSCALL_H_ */
