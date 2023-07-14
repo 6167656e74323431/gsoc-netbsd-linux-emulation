@@ -222,7 +222,7 @@ static const struct inotify_kevent_mask_pair common_inotify_to_kevent[] = {
 	{ .inotify = LINUX_IN_MOVE_SELF,	.kevent = NOTE_RENAME, },
 };
 static const size_t common_inotify_to_kevent_len =
-    sizeof(common_inotify_to_kevent) / sizeof(common_inotify_to_kevent[0]);
+    __arraycount(common_inotify_to_kevent);
 
 static const struct inotify_kevent_mask_pair vreg_inotify_to_kevent[] = {
 	{ .inotify = LINUX_IN_ACCESS,		.kevent = NOTE_READ, },
@@ -231,7 +231,7 @@ static const struct inotify_kevent_mask_pair vreg_inotify_to_kevent[] = {
 	{ .inotify = LINUX_IN_MODIFY,		.kevent = NOTE_WRITE, },
 };
 static const size_t vreg_inotify_to_kevent_len =
-    sizeof(vreg_inotify_to_kevent) / sizeof(vreg_inotify_to_kevent[0]);
+    __arraycount(vreg_inotify_to_kevent);
 
 static const struct inotify_kevent_mask_pair vdir_inotify_to_kevent[] = {
 	{ .inotify = LINUX_IN_ACCESS,		.kevent = NOTE_READ, },
@@ -241,7 +241,7 @@ static const struct inotify_kevent_mask_pair vdir_inotify_to_kevent[] = {
 	{ .inotify = LINUX_IN_MOVED_TO,		.kevent = NOTE_WRITE, },
 };
 static const size_t vdir_inotify_to_kevent_len =
-    sizeof(vdir_inotify_to_kevent) / sizeof(vdir_inotify_to_kevent[0]);
+    __arraycount(vdir_inotify_to_kevent);
 
 static const struct inotify_kevent_mask_pair common_kevent_to_inotify[] = {
 	{ .kevent = NOTE_ATTRIB,	.inotify = LINUX_IN_ATTRIB, },
@@ -253,14 +253,14 @@ static const struct inotify_kevent_mask_pair common_kevent_to_inotify[] = {
 	{ .kevent = NOTE_REVOKE,	.inotify = LINUX_IN_UNMOUNT, },
 };
 static const size_t common_kevent_to_inotify_len =
-    sizeof(common_kevent_to_inotify) / sizeof(common_kevent_to_inotify[0]);
+    __arraycount(common_kevent_to_inotify);
 
 static const struct inotify_kevent_mask_pair vreg_kevent_to_inotify[] = {
 	{ .kevent = NOTE_DELETE|NOTE_LINK, .inotify = LINUX_IN_ATTRIB, },
 	{ .kevent = NOTE_WRITE,		.inotify = LINUX_IN_MODIFY, },
 };
 static const size_t vreg_kevent_to_inotify_len =
-    sizeof(vreg_kevent_to_inotify) / sizeof(vreg_kevent_to_inotify[0]);
+    __arraycount(vreg_kevent_to_inotify);
 
 /*
  * Register the custom kfilter for inotify.
@@ -1074,8 +1074,8 @@ linux_sys_inotify_add_watch(struct lwp *l,
 		syscallarg(uint32_t) mask;
 	} */
 	int wd, dup_of_wd, i, error = 0;
-	file_t *fp, *wp, *tmpfp;
-	struct stat wst, tmpst;
+	file_t *fp, *wp, *cur_fp;
+	struct stat wst, cur_st;
 	struct inotifyfd *ifd;
 	struct inotify_dir_entries **new_wds;
 	struct knote *kn, *tmpkn;
@@ -1140,25 +1140,25 @@ linux_sys_inotify_add_watch(struct lwp *l,
         dup_of_wd = -1;
 	for (i = 0; i < ifd->ifd_nwds; i++) {
 		if (ifd->ifd_wds[i] != NULL) {
-			tmpfp = fd_getfile(i);
-			if (tmpfp == NULL) {
+			cur_fp = fd_getfile(i);
+			if (cur_fp == NULL) {
 				DPRINTF(("%s: wd=%d was closed externally\n",
 				    __func__, i));
 				error = EBADF;
 				goto leave1;
 			}
-			if (tmpfp->f_type != DTYPE_VNODE) {
+			if (cur_fp->f_type != DTYPE_VNODE) {
 				DPRINTF(("%s: wd=%d was replace with a non-vnode\n",
 				    __func__, i));
 				error = EBADF;
 			}
 			if (error != 0)
-				error = vn_stat(tmpfp->f_vnode, &tmpst);
+				error = vn_stat(cur_fp->f_vnode, &cur_st);
 			fd_putfile(i);
 			if (error != 0)
 				goto leave1;
 
-			if (wst.st_ino == tmpst.st_ino) {
+			if (wst.st_ino == cur_st.st_ino) {
 			        dup_of_wd = i;
 				break;
 			}
@@ -1180,15 +1180,15 @@ linux_sys_inotify_add_watch(struct lwp *l,
 			goto leave1;
 		}
 
-		tmpfp = fd_getfile(dup_of_wd);
-		if (tmpfp == NULL) {
+		wp = fd_getfile(dup_of_wd);
+		if (wp == NULL) {
 			DPRINTF(("%s: wd=%d was closed externally (race, probably)\n",
 				__func__, dup_of_wd));
 			error = EBADF;
 			goto leave1;
 		}
 
-		mutex_enter(tmpfp->f_vnode->v_interlock);
+		mutex_enter(wp->f_vnode->v_interlock);
 
 		/*
 		 * XXX We are forced to find the appropriate knote
@@ -1196,7 +1196,7 @@ linux_sys_inotify_add_watch(struct lwp *l,
 		 * function for inotify_filtops.  See filter_touch()
 		 * in kern_event.c for details.
 		 */
-	        SLIST_FOREACH_SAFE(kn, &tmpfp->f_vnode->v_klist->vk_klist,
+	        SLIST_FOREACH_SAFE(kn, &wp->f_vnode->v_klist->vk_klist,
 		    kn_selnext, tmpkn) {
 			if (kn->kn_fop == &inotify_filtops) {
 				mutex_enter(&kn->kn_kq->kq_lock);
@@ -1208,7 +1208,7 @@ linux_sys_inotify_add_watch(struct lwp *l,
 			}
 		}
 
-		mutex_exit(tmpfp->f_vnode->v_interlock);
+		mutex_exit(wp->f_vnode->v_interlock);
 		fd_putfile(dup_of_wd);
 	} else {
 		/*
@@ -1656,7 +1656,7 @@ inotify_filt_event(struct knote *kn, long hint)
 {
 	struct inotifyfd *ifd = kn->kn_kevent.udata;
         struct vnode *vp = (struct vnode *)kn->kn_hook;
-	struct inotify_entry *tmp;
+	struct inotify_entry *cur_ie;
 	size_t nbuf, i;
 	struct inotify_entry buf[LINUX_INOTIFY_MAX_FROM_KEVENT];
 
@@ -1681,20 +1681,20 @@ inotify_filt_event(struct knote *kn, long hint)
 	    hint, buf, &nbuf);
 	for (i = 0; i < nbuf && ifd->ifd_qcount < LINUX_INOTIFY_MAX_QUEUED-1;
 	     i++) {
-		tmp = kmem_zalloc(sizeof(*tmp), KM_SLEEP);
-		memcpy(tmp, &buf[i], sizeof(*tmp));
+		cur_ie = kmem_zalloc(sizeof(*cur_ie), KM_SLEEP);
+		memcpy(cur_ie, &buf[i], sizeof(*cur_ie));
 
-		TAILQ_INSERT_TAIL(&ifd->ifd_qhead, tmp, ie_entries);
+		TAILQ_INSERT_TAIL(&ifd->ifd_qhead, cur_ie, ie_entries);
 		ifd->ifd_qcount++;
 	}
 	/* handle early overflow, by adding an overflow event to the end */
 	if (i != nbuf) {
 		nbuf = 0;
-		tmp = kmem_zalloc(sizeof(*tmp), KM_SLEEP);
+		cur_ie = kmem_zalloc(sizeof(*cur_ie), KM_SLEEP);
 		do_kevent_to_inotify(-1, LINUX_IN_Q_OVERFLOW, 0,
-		    tmp, &nbuf, NULL);
+		    cur_ie, &nbuf, NULL);
 
-		TAILQ_INSERT_TAIL(&ifd->ifd_qhead, tmp, ie_entries);
+		TAILQ_INSERT_TAIL(&ifd->ifd_qhead, cur_ie, ie_entries);
 		ifd->ifd_qcount++;
 	}
 
@@ -1720,8 +1720,8 @@ static int
 inotify_read(file_t *fp, off_t *offp, struct uio *uio, kauth_cred_t cred,
     int flags)
 {
-	struct inotify_entry *tmp;
-	size_t tmp_size, nread;
+	struct inotify_entry *cur_iep;
+	size_t cur_size, nread;
 	int error = 0;
 	struct inotifyfd *ifd = fp->f_data;
 
@@ -1748,26 +1748,26 @@ inotify_read(file_t *fp, off_t *offp, struct uio *uio, kauth_cred_t cred,
 
 	nread = 0;
 	while (ifd->ifd_qcount > 0) {
-		tmp = TAILQ_FIRST(&ifd->ifd_qhead);
-		KASSERT(tmp != NULL);
+		cur_iep = TAILQ_FIRST(&ifd->ifd_qhead);
+		KASSERT(cur_iep != NULL);
 
-		tmp_size = sizeof(tmp->ie_event) + tmp->ie_event.len;
-		if (tmp_size > uio->uio_resid) {
+		cur_size = sizeof(cur_iep->ie_event) + cur_iep->ie_event.len;
+		if (cur_size > uio->uio_resid) {
 			if (nread == 0)
 				error = EINVAL;
 			break;
 		}
 
-		error = uiomove(&tmp->ie_event, sizeof(tmp->ie_event), uio);
+		error = uiomove(&cur_iep->ie_event, sizeof(cur_iep->ie_event), uio);
 		if (error != 0)
 			break;
-		error = uiomove(&tmp->ie_name, tmp->ie_event.len, uio);
+		error = uiomove(&cur_iep->ie_name, cur_iep->ie_event.len, uio);
 		if (error != 0)
 			break;
 
 		/* cleanup */
-		TAILQ_REMOVE(&ifd->ifd_qhead, tmp, ie_entries);
-		kmem_free(tmp, sizeof(*tmp));
+		TAILQ_REMOVE(&ifd->ifd_qhead, cur_iep, ie_entries);
+		kmem_free(cur_iep, sizeof(*cur_iep));
 
 		nread++;
 		ifd->ifd_qcount--;
