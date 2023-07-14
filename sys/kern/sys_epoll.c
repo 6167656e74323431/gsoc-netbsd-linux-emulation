@@ -100,7 +100,8 @@ static int	epoll_check_loop_and_depth(struct lwp *l, int epfd, int fd);
  * epoll_create1(2).  Parse the flags and then create a kqueue instance.
  */
 int
-sys_epoll_create1(struct lwp *l, const struct sys_epoll_create1_args *uap, register_t *retval)
+sys_epoll_create1(struct lwp *l, const struct sys_epoll_create1_args *uap,
+    register_t *retval)
 {
 	/* {
 		syscallarg(int) flags;
@@ -267,7 +268,8 @@ epoll_kev_fetch_timeout(const void *src, void *dest, size_t size)
  * and load it into kevent subsystem.
  */
 int
-sys_epoll_ctl(struct lwp *l, const struct sys_epoll_ctl_args *uap, register_t *retval)
+sys_epoll_ctl(struct lwp *l, const struct sys_epoll_ctl_args *uap,
+    register_t *retval)
 {
 	/* {
 		syscallarg(int) epfd;
@@ -296,8 +298,10 @@ sys_epoll_ctl(struct lwp *l, const struct sys_epoll_ctl_args *uap, register_t *r
 			return error;
 	}
 
-	/* Need to validate epfd and fd separately from kevent1 to match
-	   Linux's errno behaviour. */
+	/*
+	 * Need to validate epfd and fd separately from kevent1 to match
+	 * Linux's errno behaviour.
+	 */
 	epfp = fd_getfile(epfd);
 	if (epfp == NULL)
 		return EBADF;
@@ -397,8 +401,10 @@ epoll_wait_common(struct lwp *l, register_t *retval, int epfd,
 	if (maxevents <= 0 || maxevents > EPOLL_MAX_EVENTS)
 		return EINVAL;
 
-	/* Need to validate epfd separately from kevent1 to match
-	   Linux's errno behaviour. */
+	/*
+	 * Need to validate epfd separately from kevent1 to match
+	 * Linux's errno behaviour.
+	 */
 	epfp = fd_getfile(epfd);
 	if (epfp == NULL)
 		return EBADF;
@@ -425,7 +431,7 @@ epoll_wait_common(struct lwp *l, register_t *retval, int epfd,
 		error = coargs.error;
 
 	/*
-	 * kern_kevent might return ENOMEM which is not expected from epoll_wait.
+	 * kevent1 might return ENOMEM which is not expected from epoll_wait.
 	 * Maybe we should translate that but I don't think it matters at all.
 	 */
 	if (error == 0)
@@ -444,7 +450,8 @@ epoll_wait_common(struct lwp *l, register_t *retval, int epfd,
  * epoll_pwait2(2).
  */
 int
-sys_epoll_pwait2(struct lwp *l, const struct sys_epoll_pwait2_args *uap, register_t *retval)
+sys_epoll_pwait2(struct lwp *l, const struct sys_epoll_pwait2_args *uap,
+    register_t *retval)
 {
 	/* {
 		syscallarg(int) epfd;
@@ -642,9 +649,11 @@ epoll_check_loop_and_depth(struct lwp *l, int epfd, int fd)
 
 	nfds = l->l_proc->p_fd->fd_lastfile + 1;
 
-	/* We call epoll_recover_watch_tree twice, once to find the
-	   number of edges, and once to actually fill them in.  We add one
-	   because we want to include the edge epfd->fd. */
+	/*
+	 * We call epoll_recover_watch_tree twice, once to find the
+	 * number of edges, and once to actually fill them in.  We add one
+	 * because we want to include the edge epfd->fd.
+	 */
         nedges = 1 + epoll_recover_watch_tree(NULL, 0, nfds);
 
 	edges = kmem_zalloc(nedges * sizeof(*edges), KM_SLEEP);
