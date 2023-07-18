@@ -60,12 +60,6 @@
 #define	DPRINTF(x) __nothing
 #endif
 
-struct epoll_copyout_args {
-	struct epoll_event *leventlist;
-	int			 count;
-	int			 error;
-};
-
 struct epoll_edge {
 	int epfd;
 	int fd;
@@ -200,37 +194,22 @@ kevent_to_epoll(struct kevent *kevent, struct epoll_event *l_event)
 }
 
 /*
- * Copyout callback used by kevent. This converts kevent
- * events to epoll events and copies them back to the
- * userspace. This is also called on error on registering
- * of the filter.
+ * Copyout callback used by kevent.  This converts kevent events to
+ * epoll events that are located in args->eventlist.
  */
 static int
 epoll_kev_put_events(void *ctx, struct kevent *events,
     struct kevent *eventlist, size_t index, int n)
 {
-	struct epoll_copyout_args *args;
-	struct epoll_event *eep;
-	int error, i;
-	size_t levent_size = sizeof(*eep) * n;
+	int i;
+	struct epoll_event *eep = (struct epoll_event *)eventlist;
 
 	KASSERT(n >= 0 && n < EPOLL_MAX_EVENTS);
 
-	args = (struct epoll_copyout_args *)ctx;
-	eep = kmem_alloc(levent_size, KM_SLEEP);
-
 	for (i = 0; i < n; i++)
-		kevent_to_epoll(events + index + i, eep + i);
+		kevent_to_epoll(events + i, eep + index + i);
 
-	error = copyout(eep, args->leventlist, levent_size);
-	if (error == 0) {
-		args->leventlist += n;
-		args->count += n;
-	} else if (args->error == 0)
-		args->error = error;
-
-	kmem_free(eep, levent_size);
-	return error;
+	return 0;
 }
 
 /*
@@ -264,21 +243,16 @@ epoll_kev_fetch_timeout(const void *src, void *dest, size_t size)
 }
 
 /*
- * Load epoll filter, convert it to kevent filter
- * and load it into kevent subsystem.
+ * Load epoll filter, convert it to kevent filter and load it into
+ * kevent subsystem.
+ *
+ * event must point to kernel memory or be NULL.
  */
 int
-sys_epoll_ctl(struct lwp *l, const struct sys_epoll_ctl_args *uap,
-    register_t *retval)
+epoll_ctl_common(struct lwp *l, register_t *retval, int epfd, int op, int fd,
+    struct epoll_event *event)
 {
-	/* {
-		syscallarg(int) epfd;
-		syscallarg(int) op;
-		syscallarg(int) fd;
-		syscallarg(struct epoll_event *) event;
-	} */
 	struct kevent kev[2];
-	struct epoll_event le;
         struct kevent_ops k_ops = {
 		.keo_private = NULL,
 		.keo_fetch_timeout = NULL,
@@ -288,15 +262,6 @@ sys_epoll_ctl(struct lwp *l, const struct sys_epoll_ctl_args *uap,
 	file_t *epfp, *fp;
 	int error = 0;
 	int nchanges = 0;
-	const int epfd = SCARG(uap, epfd);
-	const int op = SCARG(uap, op);
-	const int fd = SCARG(uap, fd);
-
-	if (op != EPOLL_CTL_DEL) {
-		error = copyin(SCARG(uap, event), &le, sizeof(le));
-		if (error != 0)
-			return error;
-	}
 
 	/*
 	 * Need to validate epfd and fd separately from kevent1 to match
@@ -337,7 +302,7 @@ sys_epoll_ctl(struct lwp *l, const struct sys_epoll_ctl_args *uap,
 	}
 
 	if (op != EPOLL_CTL_DEL) {
-		error = epoll_to_kevent(epfd, fd, &le, kev, &nchanges);
+		error = epoll_to_kevent(epfd, fd, event, kev, &nchanges);
 		if (error != 0)
 			return error;
 	}
@@ -376,19 +341,49 @@ sys_epoll_ctl(struct lwp *l, const struct sys_epoll_ctl_args *uap,
 }
 
 /*
+ * epoll_ctl(2).  Copyin event if necessary and then call
+ * epoll_ctl_common().
+ */
+int
+sys_epoll_ctl(struct lwp *l, const struct sys_epoll_ctl_args *uap,
+    register_t *retval)
+{
+	/* {
+		syscallarg(int) epfd;
+		syscallarg(int) op;
+		syscallarg(int) fd;
+		syscallarg(struct epoll_event *) event;
+	} */
+	struct epoll_event ee;
+	struct epoll_event *eep;
+	int error;
+
+	if (SCARG(uap, op) != EPOLL_CTL_DEL) {
+		error = copyin(SCARG(uap, event), &ee, sizeof(ee));
+		if (error != 0)
+			return error;
+
+		eep = &ee;
+	} else
+		eep = NULL;
+
+	return epoll_ctl_common(l, retval, SCARG(uap, epfd), SCARG(uap, op),
+	    SCARG(uap, fd), eep);
+}
+
+/*
  * Wait for a filter to be triggered on the epoll file descriptor.
  * All of the epoll_*wait* syscalls eventually end up here.
  *
- * nss and ssp must point to kernel memory (or be NULL).
+ * events, nss, and ssp must point to kernel memory (or be NULL).
  */
 int
 epoll_wait_common(struct lwp *l, register_t *retval, int epfd,
     struct epoll_event *events, int maxevents, struct timespec *tsp,
     const sigset_t *nssp)
 {
-	struct epoll_copyout_args coargs;
 	struct kevent_ops k_ops = {
-	        .keo_private = &coargs,
+	        .keo_private = NULL,
 		.keo_fetch_timeout = epoll_kev_fetch_timeout,
 		.keo_fetch_changes = NULL,
 		.keo_put_events = epoll_kev_put_events,
@@ -422,20 +417,12 @@ epoll_wait_common(struct lwp *l, register_t *retval, int epfd,
 			return error;
 	}
 
-	coargs.leventlist = events;
-	coargs.count = 0;
-	coargs.error = 0;
-
-	error = kevent1(retval, epfd, NULL, 0, NULL, maxevents, tsp, &k_ops);
-	if (error == 0 && coargs.error != 0)
-		error = coargs.error;
-
+	error = kevent1(retval, epfd, NULL, 0, (struct kevent *)events,
+	    maxevents, tsp, &k_ops);
 	/*
 	 * kevent1 might return ENOMEM which is not expected from epoll_wait.
 	 * Maybe we should translate that but I don't think it matters at all.
 	 */
-	if (error == 0)
-		*retval = coargs.count;
 
 	if (nssp != NULL) {
 	        mutex_enter(p->p_lock);
@@ -460,9 +447,14 @@ sys_epoll_pwait2(struct lwp *l, const struct sys_epoll_pwait2_args *uap,
 		syscallarg(struct timespec *) timeout;
 		syscallarg(sigset_t *) sigmask;
 	} */
+	struct epoll_event *events;
 	struct timespec ts, *tsp;
 	sigset_t ss, *ssp;
 	int error;
+	const int maxevents = SCARG(uap, maxevents);
+
+	if (maxevents <= 0)
+		return EINVAL;
 
 	if (SCARG(uap, timeout) != NULL) {
 		error = copyin(SCARG(uap, timeout), &ts, sizeof(ts));
@@ -482,8 +474,16 @@ sys_epoll_pwait2(struct lwp *l, const struct sys_epoll_pwait2_args *uap,
 	} else
 		ssp = NULL;
 
-	return epoll_wait_common(l, retval, SCARG(uap, epfd),
-	    SCARG(uap, events), SCARG(uap, maxevents), tsp, ssp);
+	events = kmem_alloc(maxevents * sizeof(*events), KM_SLEEP);
+
+	error = epoll_wait_common(l, retval, SCARG(uap, epfd), events,
+	    maxevents, tsp, ssp);
+	if (error == 0)
+		error = copyout(events, SCARG(uap, events),
+		    (*retval) * sizeof(*events));
+
+	kmem_free(events, maxevents * sizeof(*events));
+	return error;
 }
 
 /*

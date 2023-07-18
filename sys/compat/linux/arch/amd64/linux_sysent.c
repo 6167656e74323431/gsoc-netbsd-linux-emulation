@@ -24,6 +24,7 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include <sys/time.h>
 #include <compat/sys/time.h>
 #include <compat/linux/common/linux_types.h>
+#include <compat/linux/common/linux_misc.h>
 #include <compat/linux/common/linux_mmap.h>
 #include <compat/linux/common/linux_ipc.h>
 #include <compat/linux/common/linux_msg.h>
@@ -1097,9 +1098,9 @@ struct sysent linux_sysent[] = {
 		.sy_call = (sy_call_t *)linux_sys_epoll_wait
 	},		/* 232 = epoll_wait */
 	{
-		ns(struct sys_epoll_ctl_args),
+		ns(struct linux_sys_epoll_ctl_args),
 		.sy_flags = SYCALL_ARG_PTR,
-		.sy_call = (sy_call_t *)sys_epoll_ctl
+		.sy_call = (sy_call_t *)linux_sys_epoll_ctl
 	},		/* 233 = epoll_ctl */
 	{
 		ns(struct linux_sys_tgkill_args),
