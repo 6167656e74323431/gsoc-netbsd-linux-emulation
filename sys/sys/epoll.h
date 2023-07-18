@@ -31,22 +31,22 @@
 
 #include <sys/types.h>			/* for uint32_t, uint64_t */
 #include <sys/sigtypes.h>		/* for sigset_t */
-#include <sys/time.h>			/* for struct timespec */
+struct timespec;
 
-#define	EPOLLIN		0x001
-#define	EPOLLPRI	0x002
-#define	EPOLLOUT	0x004
-#define	EPOLLRDNORM	0x040
-#define	EPOLLRDBAND	0x080
-#define	EPOLLWRNORM	0x100
-#define	EPOLLWRBAND	0x200
-#define	EPOLLMSG	0x400
-#define	EPOLLERR	0x008
-#define	EPOLLHUP	0x010
-#define	EPOLLRDHUP	0x2000
-#define	EPOLLWAKEUP	1u<<29
-#define	EPOLLONESHOT	1u<<30
-#define	EPOLLET		1u<<31
+#define	EPOLLIN		0x00000001
+#define	EPOLLPRI	0x00000002
+#define	EPOLLOUT	0x00000004
+#define	EPOLLERR	0x00000008
+#define	EPOLLHUP	0x00000010
+#define	EPOLLRDNORM	0x00000040
+#define	EPOLLRDBAND	0x00000080
+#define	EPOLLWRNORM	0x00000100
+#define	EPOLLWRBAND	0x00000200
+#define	EPOLLMSG	0x00000400
+#define	EPOLLRDHUP	0x00002000
+#define	EPOLLWAKEUP	0x20000000
+#define	EPOLLONESHOT	0x40000000
+#define	EPOLLET		0x80000000
 
 #define	EPOLL_CTL_ADD	1
 #define	EPOLL_CTL_DEL	2
@@ -68,13 +68,11 @@ typedef union epoll_data	epoll_data_t;
 struct epoll_event {
 	uint32_t	events;
 	epoll_data_t	data;
-}
-#if defined(__amd64__)
-__attribute__((packed))
-#endif
-;
+};
 
 #ifdef _KERNEL
+int	epoll_ctl_common(struct lwp *l, register_t *retval, int epfd, int op,
+	    int fd, struct epoll_event *event);
 int	epoll_wait_common(struct lwp *l, register_t *retval, int epfd,
 	    struct epoll_event *events, int maxevents, struct timespec *tsp,
 	    const sigset_t *nss);

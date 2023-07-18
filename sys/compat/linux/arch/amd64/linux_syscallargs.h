@@ -920,13 +920,19 @@ check_syscall_args(linux_sys_exit_group)
 
 struct linux_sys_epoll_wait_args {
 	syscallarg(int) epfd;
-	syscallarg(struct epoll_event *) events;
+	syscallarg(struct linux_epoll_event *) events;
 	syscallarg(int) maxevents;
 	syscallarg(int) timeout;
 };
 check_syscall_args(linux_sys_epoll_wait)
 
-struct sys_epoll_ctl_args;
+struct linux_sys_epoll_ctl_args {
+	syscallarg(int) epfd;
+	syscallarg(int) op;
+	syscallarg(int) fd;
+	syscallarg(struct linux_epoll_event *) event;
+};
+check_syscall_args(linux_sys_epoll_ctl)
 
 struct linux_sys_tgkill_args {
 	syscallarg(int) tgid;
@@ -1049,7 +1055,7 @@ check_syscall_args(linux_sys_utimensat)
 
 struct linux_sys_epoll_pwait_args {
 	syscallarg(int) epfd;
-	syscallarg(struct epoll_event *) events;
+	syscallarg(struct linux_epoll_event *) events;
 	syscallarg(int) maxevents;
 	syscallarg(int) timeout;
 	syscallarg(const linux_sigset_t *) sigmask;
@@ -1174,7 +1180,7 @@ check_syscall_args(linux_sys_memfd_create)
 
 struct linux_sys_epoll_pwait2_args {
 	syscallarg(int) epfd;
-	syscallarg(struct epoll_event *) events;
+	syscallarg(struct linux_epoll_event *) events;
 	syscallarg(int) maxevents;
 	syscallarg(const struct linux_timespec *) timeout;
 	syscallarg(const linux_sigset_t *) sigmask;
@@ -1588,7 +1594,7 @@ int	linux_sys_exit_group(struct lwp *, const struct linux_sys_exit_group_args *,
 
 int	linux_sys_epoll_wait(struct lwp *, const struct linux_sys_epoll_wait_args *, register_t *);
 
-int	sys_epoll_ctl(struct lwp *, const struct sys_epoll_ctl_args *, register_t *);
+int	linux_sys_epoll_ctl(struct lwp *, const struct linux_sys_epoll_ctl_args *, register_t *);
 
 int	linux_sys_tgkill(struct lwp *, const struct linux_sys_tgkill_args *, register_t *);
 
