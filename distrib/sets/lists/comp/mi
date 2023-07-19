@@ -3327,6 +3327,7 @@
 ./usr/include/sys/elfdefinitions.h		comp-c-include
 ./usr/include/sys/endian.h			comp-c-include
 ./usr/include/sys/envsys.h			comp-c-include
+./usr/include/sys/epoll.h			comp-c-include
 ./usr/include/sys/errno.h			comp-c-include
 ./usr/include/sys/evcnt.h			comp-c-include
 ./usr/include/sys/event.h			comp-c-include
