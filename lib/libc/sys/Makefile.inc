@@ -260,7 +260,7 @@ LintSysPseudoNoerr.c: ${LIBCDIR}/sys/makelintstub \
 MAN+=	accept.2 access.2 acct.2 adjtime.2 bind.2 brk.2 chdir.2 \
 	chflags.2 chmod.2 chown.2 chroot.2 clock_getcpuclockid2.2 \
 	clock_settime.2 clone.2 close.2 \
-	connect.2 dup.2 eventfd.2 execve.2 _exit.2 extattr_get_file.2 \
+	connect.2 dup.2 epoll.2 eventfd.2 execve.2 _exit.2 extattr_get_file.2 \
 	fcntl.2 fdatasync.2 fdiscard.2 fhopen.2 \
 	flock.2 fork.2 fsync.2 getcontext.2 getdents.2 \
 	getfh.2 getvfsstat.2 getgid.2 getgroups.2 \
@@ -308,6 +308,15 @@ MLINKS+=chown.2 fchown.2 chown.2 lchown.2
 MLINKS+=chroot.2 fchroot.2
 MLINKS+=clock_settime.2 clock_gettime.2
 MLINKS+=clock_settime.2 clock_getres.2
+MLINKS+=epoll.2 epoll_event.2 \
+	epoll.2 epoll_data.2 \
+	epoll.2 epoll_data_t.2 \
+	epoll.2 epoll_create.2 \
+	epoll.2 epoll_create1.2 \
+	epoll.2 epoll_ctl.2 \
+	epoll.2 epoll_wait.2 \
+	epoll.2 epoll_pwait.2 \
+	epoll.2 epoll_pwait2.2
 MLINKS+=eventfd.2 eventfd_read.2 \
 	eventfd.2 eventfd_write.2
 MLINKS+=extattr_get_file.2 extattr_set_file.2 \
