@@ -420,9 +420,10 @@ epoll_wait_common(struct lwp *l, register_t *retval, int epfd,
 	error = kevent1(retval, epfd, NULL, 0, (struct kevent *)events,
 	    maxevents, tsp, &k_ops);
 	/*
-	 * kevent1 might return ENOMEM which is not expected from epoll_wait.
-	 * Maybe we should translate that but I don't think it matters at all.
+	 * Since we're not registering nay events, ENOMEM should not
+	 * be possible for this specific kevent1 call.
 	 */
+	KASSERT(error != ENOMEM);
 
 	if (nssp != NULL) {
 	        mutex_enter(p->p_lock);
