@@ -32,9 +32,9 @@
 .Os
 .Sh NAME
 .Nm epoll ,
-.Nm epoll_event ,
 .Nm epoll_data ,
 .Nm epoll_data_t ,
+.Nm epoll_event ,
 .Nm epoll_create ,
 .Nm epoll_create1 ,
 .Nm epoll_ctl ,
@@ -91,8 +91,8 @@ and
 .Va data .
 The
 .Va data
-field is passed through the kernel and is intended to be used to identify the
-event.
+field is passed through the kernel unmodified and is intended to be used to
+identify the event.
 When used with
 .Fa epoll_ctl ,
 the
@@ -103,7 +103,7 @@ instance should watch for, and when being used with
 .Fa epoll_wait ,
 .Fa epoll_pwait ,
 and
-.Fa epoll_pwait2
+.Fa epoll_pwait2 ,
 consists of a mask of the events that occurred.
 The following are possible values for
 .Va events :
@@ -171,7 +171,11 @@ on the
 for the events specified in
 .Fa event .
 .It Dv EPOLL_CTL_MOD
-Modify the events registered for
+Modify the
+.Va events
+and
+.Va data
+registered for
 .Fa fd
 to those specified in
 .Fa event .
@@ -191,9 +195,10 @@ is completely ignored in this case.
 .Fn epoll_pwait ,
 and
 .Fn epoll_pwait2
-provide the ability to wait for up to
+provide the ability to wait for events.
+On return, up to
 .Fa maxevents
-which are stored in the buffer pointed to by
+events are are stored in the buffer pointed to by
 .Fa events .
 For
 .Fn epoll_wait
@@ -306,6 +311,17 @@ and
 represent the same
 .Nm
 instance.
+.Pp
+.Fa op
+is
+.Dv EPOLL_CTL_ADD
+and adding
+.Fa fd
+to
+.Fa epfd
+would result in a chain of
+.Nm
+instances with a depth greater than five.
 .It Bq Er ELOOP
 .Fa op
 is
@@ -369,7 +385,7 @@ is less than or equal to zero.
 The
 .Nm
 functions and types are designed to be compatible with the Linux system calls of
-the same name.
+the same name that first appeared in Linux 2.5.44.
 .Sh CAVEATS
 The
 .Nm
