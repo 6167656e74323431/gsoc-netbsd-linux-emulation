@@ -237,8 +237,7 @@ test_all_seals_except(int fd, int except)
 	void *addr;
 
 	RL(fstat(fd, &st));
-	ATF_REQUIRE_MSG(st.st_size > 0,
-	    "");
+	ATF_REQUIRE(st.st_size > 0);
 
 	if (except & ~F_SEAL_SEAL) {
 		rv = fcntl(fd, F_ADD_SEALS, F_SEAL_SEAL);
