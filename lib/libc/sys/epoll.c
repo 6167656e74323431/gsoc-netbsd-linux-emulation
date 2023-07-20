@@ -28,11 +28,17 @@
 #include <sys/sigtypes.h>
 #include <sys/time.h>
 
+#include <errno.h>
 #include <stddef.h>
 
 int
 epoll_create(int size)
 {
+	if (size <= 0) {
+		errno = EINVAL;
+		return -1;
+	}
+
 	return epoll_create1(0);
 }
 
