@@ -141,6 +141,10 @@ The
 .Fa size
 argument specified for
 .Fn epoll_create
+exists so that the
+.Nx
+function has the same signature as the Linux system call of the same name.
+.Fa size
 must be positive, but is otherwise unused.
 Additionally, optionally,
 .Dv EPOLL_CLOEXEC
