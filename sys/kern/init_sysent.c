@@ -2444,15 +2444,13 @@ struct sysent sysent[] = {
 		.sy_call = (sy_call_t *)sys_lpathconf
 	},		/* 499 = lpathconf */
 	{
+		.sy_call = sys_nosys,
+	},		/* 500 = filler */
+	{
 		ns(struct sys___kevent100_args),
 		.sy_flags = SYCALL_ARG_PTR,
 		.sy_call = (sy_call_t *)sys___kevent100
-	},		/* 500 = __kevent100 */
-	{
-		ns(struct sys_memfd_create_args),
-		.sy_flags = SYCALL_ARG_PTR,
-		.sy_call = (sy_call_t *)sys_memfd_create
-	},		/* 501 = memfd_create */
+	},		/* 501 = __kevent100 */
 	{
 		ns(struct sys_epoll_create1_args),
 		.sy_call = (sy_call_t *)sys_epoll_create1

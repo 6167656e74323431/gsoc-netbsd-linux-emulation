@@ -1405,10 +1405,7 @@
 #define	SYS_lpathconf	499
 
 /* syscall: "__kevent100" ret: "int" args: "int" "const struct kevent *" "size_t" "struct kevent *" "size_t" "const struct timespec *" */
-#define	SYS___kevent100	500
-
-/* syscall: "memfd_create" ret: "int" args: "const char *" "unsigned int" */
-#define	SYS_memfd_create	501
+#define	SYS___kevent100	501
 
 /* syscall: "epoll_create1" ret: "int" args: "int" */
 #define	SYS_epoll_create1	502

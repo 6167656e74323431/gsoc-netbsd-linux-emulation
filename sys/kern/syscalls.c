@@ -550,8 +550,8 @@ const char *const syscallnames[] = {
 	/* 497 */	"__acl_aclcheck_file",
 	/* 498 */	"__acl_aclcheck_fd",
 	/* 499 */	"lpathconf",
-	/* 500 */	"__kevent100",
-	/* 501 */	"memfd_create",
+	/* 500 */	"#500 (unimplemented)",
+	/* 501 */	"__kevent100",
 	/* 502 */	"epoll_create1",
 	/* 503 */	"epoll_ctl",
 	/* 504 */	"epoll_pwait2",
@@ -1087,8 +1087,8 @@ const char *const altsyscallnames[] = {
 	/* 497 */	NULL, /* __acl_aclcheck_file */
 	/* 498 */	NULL, /* __acl_aclcheck_fd */
 	/* 499 */	NULL, /* lpathconf */
-	/* 500 */	"kevent",
-	/* 501 */	NULL, /* memfd_create */
+	/* 500 */	NULL, /* unimplemented */
+	/* 501 */	"kevent",
 	/* 502 */	NULL, /* epoll_create1 */
 	/* 503 */	NULL, /* epoll_ctl */
 	/* 504 */	NULL, /* epoll_pwait2 */

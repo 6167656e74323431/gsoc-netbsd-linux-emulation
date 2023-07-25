@@ -8607,12 +8607,13 @@ struct sysent rump_sysent[] = {
 		.sy_call = (sy_call_t *)(void *)rumpns_enosys,
 	},		/* 499 = lpathconf */
 	{
+		.sy_flags = SYCALL_NOSYS,
+		.sy_call = (sy_call_t *)(void *)rumpns_enosys,
+	},		/* 500 = filler */
+	{
 		ns(struct sys___kevent100_args),
 		.sy_call = (sy_call_t *)(void *)rumpns_enosys,
-	},		/* 500 = __kevent100 */
-	{
-		.sy_call = (sy_call_t *)(void *)rumpns_enosys,
-},		/* 501 = memfd_create */
+	},		/* 501 = __kevent100 */
 	{
 		.sy_call = (sy_call_t *)(void *)rumpns_enosys,
 },		/* 502 = epoll_create1 */

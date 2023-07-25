@@ -148,7 +148,7 @@ static const struct rump_onesyscall mysys[] = {
 	{ 455,	sys_kqueue1 },
 	{ 477,	sys_clock_nanosleep },
 	{ 482,	sys_clock_getcpuclockid2 },
-	{ 500,	sys___kevent100 },
+	{ 501,	sys___kevent100 },
 };
 
 RUMP_COMPONENT(RUMP_COMPONENT_SYSCALL)
