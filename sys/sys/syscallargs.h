@@ -1,4 +1,4 @@
-/* $NetBSD: syscallargs.h,v 1.305 2021/11/01 05:26:27 thorpej Exp $ */
+/* $NetBSD$ */
 
 /*
  * System call argument lists.
@@ -2192,9 +2192,9 @@ check_syscall_args(sys_rasctl)
 
 struct compat_50_sys_kevent_args {
 	syscallarg(int) fd;
-	syscallarg(const struct kevent *) changelist;
+	syscallarg(const struct kevent100 *) changelist;
 	syscallarg(size_t) nchanges;
-	syscallarg(struct kevent *) eventlist;
+	syscallarg(struct kevent100 *) eventlist;
 	syscallarg(size_t) nevents;
 	syscallarg(const struct timespec50 *) timeout;
 };
@@ -2836,15 +2836,15 @@ struct compat_60_sys__lwp_park_args {
 check_syscall_args(compat_60_sys__lwp_park)
 #endif /* !RUMP_CLIENT */
 
-struct sys___kevent50_args {
+struct compat_100_sys___kevent50_args {
 	syscallarg(int) fd;
-	syscallarg(const struct kevent *) changelist;
+	syscallarg(const struct kevent100 *) changelist;
 	syscallarg(size_t) nchanges;
-	syscallarg(struct kevent *) eventlist;
+	syscallarg(struct kevent100 *) eventlist;
 	syscallarg(size_t) nevents;
 	syscallarg(const struct timespec *) timeout;
 };
-check_syscall_args(sys___kevent50)
+check_syscall_args(compat_100_sys___kevent50)
 
 struct sys___pselect50_args {
 	syscallarg(int) nd;
@@ -3355,6 +3355,16 @@ struct sys_lpathconf_args {
 	syscallarg(int) name;
 };
 check_syscall_args(sys_lpathconf)
+
+struct sys___kevent100_args {
+	syscallarg(int) fd;
+	syscallarg(const struct kevent *) changelist;
+	syscallarg(size_t) nchanges;
+	syscallarg(struct kevent *) eventlist;
+	syscallarg(size_t) nevents;
+	syscallarg(const struct timespec *) timeout;
+};
+check_syscall_args(sys___kevent100)
 
 /*
  * System call prototypes.
@@ -4149,7 +4159,7 @@ int	sys___mq_timedreceive50(struct lwp *, const struct sys___mq_timedreceive50_a
 
 int	compat_60_sys__lwp_park(struct lwp *, const struct compat_60_sys__lwp_park_args *, register_t *);
 
-int	sys___kevent50(struct lwp *, const struct sys___kevent50_args *, register_t *);
+int	compat_100_sys___kevent50(struct lwp *, const struct compat_100_sys___kevent50_args *, register_t *);
 
 int	sys___pselect50(struct lwp *, const struct sys___pselect50_args *, register_t *);
 
@@ -4279,6 +4289,8 @@ int	sys___acl_aclcheck_file(struct lwp *, const struct sys___acl_aclcheck_file_a
 int	sys___acl_aclcheck_fd(struct lwp *, const struct sys___acl_aclcheck_fd_args *, register_t *);
 
 int	sys_lpathconf(struct lwp *, const struct sys_lpathconf_args *, register_t *);
+
+int	sys___kevent100(struct lwp *, const struct sys___kevent100_args *, register_t *);
 
 #endif /* !RUMP_CLIENT */
 #endif /* _SYS_SYSCALLARGS_H_ */

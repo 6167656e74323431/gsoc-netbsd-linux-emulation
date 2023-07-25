@@ -1,4 +1,4 @@
-/* $NetBSD: syscalls.c,v 1.327 2021/11/01 05:26:27 thorpej Exp $ */
+/* $NetBSD$ */
 
 /*
  * System call names.
@@ -8,7 +8,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: syscalls.c,v 1.327 2021/11/01 05:26:27 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD$");
 
 #if defined(_KERNEL_OPT)
 #ifdef _KERNEL_OPT
@@ -481,7 +481,7 @@ const char *const syscallnames[] = {
 	/* 432 */	"__mq_timedsend50",
 	/* 433 */	"__mq_timedreceive50",
 	/* 434 */	"compat_60__lwp_park",
-	/* 435 */	"__kevent50",
+	/* 435 */	"compat_100___kevent50",
 	/* 436 */	"__pselect50",
 	/* 437 */	"__pollts50",
 	/* 438 */	"__aio_suspend50",
@@ -550,7 +550,7 @@ const char *const syscallnames[] = {
 	/* 497 */	"__acl_aclcheck_file",
 	/* 498 */	"__acl_aclcheck_fd",
 	/* 499 */	"lpathconf",
-	/* 500 */	"# filler",
+	/* 500 */	"__kevent100",
 	/* 501 */	"# filler",
 	/* 502 */	"# filler",
 	/* 503 */	"# filler",
@@ -1018,7 +1018,7 @@ const char *const altsyscallnames[] = {
 	/* 432 */	"mq_timedsend",
 	/* 433 */	"mq_timedreceive",
 	/* 434 */	NULL, /* compat_60__lwp_park */
-	/* 435 */	"kevent",
+	/* 435 */	NULL, /* compat_100___kevent50 */
 	/* 436 */	"pselect",
 	/* 437 */	"pollts",
 	/* 438 */	"aio_suspend",
@@ -1087,7 +1087,7 @@ const char *const altsyscallnames[] = {
 	/* 497 */	NULL, /* __acl_aclcheck_file */
 	/* 498 */	NULL, /* __acl_aclcheck_fd */
 	/* 499 */	NULL, /* lpathconf */
-	/* 500 */	NULL, /* filler */
+	/* 500 */	"kevent",
 	/* 501 */	NULL, /* filler */
 	/* 502 */	NULL, /* filler */
 	/* 503 */	NULL, /* filler */

@@ -179,7 +179,7 @@ ASM_MD=	_lwp_getprivate.S mremap.S
 WEAKASM= accept.S __aio_suspend50.S clock_nanosleep.S close.S connect.S \
 	execve.S \
 	fcntl.S fdatasync.S fsync.S \
-	fsync_range.S __kevent50.S \
+	fsync_range.S __kevent100.S \
 	kill.S mq_receive.S mq_send.S __mq_timedreceive50.S __mq_timedsend50.S \
 	msgrcv.S msgsnd.S __msync13.S  __nanosleep50.S open.S openat.S \
 	paccept.S poll.S \

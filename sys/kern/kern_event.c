@@ -1785,7 +1785,7 @@ static const struct kevent_ops kevent_native_ops = {
 };
 
 int
-sys___kevent50(struct lwp *l, const struct sys___kevent50_args *uap,
+sys___kevent100(struct lwp *l, const struct sys___kevent100_args *uap,
     register_t *retval)
 {
 	/* {
