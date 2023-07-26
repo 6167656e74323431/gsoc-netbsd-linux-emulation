@@ -900,8 +900,10 @@ struct sysent linux_sysent[] = {
 		.sy_call = (sy_call_t *)linux_sys_gettid
 	},		/* 186 = gettid */
 	{
-		.sy_call = linux_sys_nosys,
-	},		/* 187 = filler */
+		ns(struct linux_sys_readahead_args),
+		.sy_flags = SYCALL_NARGS64_VAL(1) | SYCALL_ARG1_64,
+		.sy_call = (sy_call_t *)linux_sys_readahead
+	},		/* 187 = readahead */
 	{
 		ns(struct linux_sys_setxattr_args),
 		.sy_flags = SYCALL_ARG_PTR,

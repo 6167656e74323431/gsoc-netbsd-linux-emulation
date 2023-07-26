@@ -712,6 +712,13 @@ struct linux_sys_ioperm_args {
 };
 check_syscall_args(linux_sys_ioperm)
 
+struct linux_sys_readahead_args {
+	syscallarg(int) fd;
+	syscallarg(off_t) offset;
+	syscallarg(size_t) count;
+};
+check_syscall_args(linux_sys_readahead)
+
 struct linux_sys_setxattr_args {
 	syscallarg(char *) path;
 	syscallarg(char *) name;
@@ -1529,6 +1536,8 @@ int	linux_sys_iopl(struct lwp *, const struct linux_sys_iopl_args *, register_t 
 int	linux_sys_ioperm(struct lwp *, const struct linux_sys_ioperm_args *, register_t *);
 
 int	linux_sys_gettid(struct lwp *, const void *, register_t *);
+
+int	linux_sys_readahead(struct lwp *, const struct linux_sys_readahead_args *, register_t *);
 
 int	linux_sys_setxattr(struct lwp *, const struct linux_sys_setxattr_args *, register_t *);
 

@@ -1828,3 +1828,36 @@ linux_sys_memfd_create(struct lwp *l, const struct linux_sys_memfd_create_args *
 
 	return sys_memfd_create(l, &muap, retval);
 }
+
+/*
+ * readahead(2).  Call posix_fadvise with POSIX_FADV_WILLNEED with some extra
+ * error checking.
+ */
+int
+linux_sys_readahead(struct lwp *l, const struct linux_sys_readahead_args *uap,
+    register_t *retval)
+{
+	/* {
+		syscallarg(int) fd;
+		syscallarg(off_t) offset;
+		syscallarg(size_t) count;
+	} */
+	file_t *fp;
+	int error = 0;
+	const int fd = SCARG(uap, fd);
+
+	fp = fd_getfile(fd);
+	if (fp == NULL)
+		return EBADF;
+	if ((fp->f_flag & FREAD) == 0)
+		error = EBADF;
+	if (error == 0 &&
+	    (fp->f_type != DTYPE_VNODE || fp->f_vnode->v_type != VREG))
+		error = EINVAL;
+	fd_putfile(fd);
+	if (error != 0)
+		return error;
+
+	return do_posix_fadvise(fd, SCARG(uap, offset), SCARG(uap, count),
+	    POSIX_FADV_WILLNEED);
+}
