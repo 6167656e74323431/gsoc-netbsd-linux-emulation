@@ -1466,8 +1466,10 @@ struct sysent linux_sysent[] = {
 		.sy_call = linux_sys_nosys,
 	},		/* 331 = filler */
 	{
-		.sy_call = linux_sys_nosys,
-	},		/* 332 = filler */
+		ns(struct linux_sys_statx_args),
+		.sy_flags = SYCALL_ARG_PTR,
+		.sy_call = (sy_call_t *)linux_sys_statx
+	},		/* 332 = statx */
 	{
 		.sy_call = linux_sys_nosys,
 	},		/* 333 = filler */
