@@ -726,6 +726,9 @@
 /* syscall: "memfd_create" ret: "int" args: "const char *" "unsigned int" */
 #define	LINUX_SYS_memfd_create	319
 
+/* syscall: "close_range" ret: "int" args: "unsigned int" "unsigned int" "unsigned int" */
+#define	LINUX_SYS_close_range	436
+
 /* syscall: "epoll_pwait2" ret: "int" args: "int" "struct linux_epoll_event *" "int" "const struct linux_timespec *" "const linux_sigset_t *" */
 #define	LINUX_SYS_epoll_pwait2	441
 
