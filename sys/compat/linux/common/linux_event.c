@@ -53,6 +53,19 @@
 
 #include <compat/linux/linux_syscallargs.h>
 
+/*
+ * inotify(2).  This interface allows the user to get file system
+ * events and (unlike kqueue(2)) their order is strictly preserved.
+ * While nice, the API has sufficient gotchas that mean we don't want
+ * to add native entry points for it.  They are:
+ *
+ * - Because data is returned via read(2), this API is prone to
+ *   unaligned memory accesses.  There is a note in the Linux man page
+ *   that says the name field of struct linux_inotify_event *can* be
+ *   used for alignment purposes.  In practice, even Linux doesn't
+ *   always do this, so for simplicity, we don't ever do this.
+ */
+
 #define	LINUX_EPOLL_MAX_EVENTS	(INT_MAX / sizeof(struct linux_epoll_event))
 #define	LINUX_EPOLL_MAX_DEPTH	5
 
