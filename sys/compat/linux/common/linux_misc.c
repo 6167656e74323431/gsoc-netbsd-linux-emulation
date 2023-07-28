@@ -1851,8 +1851,7 @@ linux_sys_readahead(struct lwp *l, const struct linux_sys_readahead_args *uap,
 		return EBADF;
 	if ((fp->f_flag & FREAD) == 0)
 		error = EBADF;
-	if (error == 0 &&
-	    (fp->f_type != DTYPE_VNODE || fp->f_vnode->v_type != VREG))
+	else if (fp->f_type != DTYPE_VNODE || fp->f_vnode->v_type != VREG)
 		error = EINVAL;
 	fd_putfile(fd);
 	if (error != 0)
