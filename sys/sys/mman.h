@@ -233,7 +233,6 @@ struct memfd {
 	struct uvm_object	*mfd_uobj;
 	size_t			mfd_size;
 	int			mfd_seals;
-	kmutex_t		mfd_lock;	/* for truncate */
 
 	struct timespec		mfd_btime;
 	struct timespec		mfd_atime;
