@@ -2454,14 +2454,19 @@ struct sysent sysent[] = {
 		.sy_call = (sy_call_t *)sys___kevent100
 	},		/* 501 = __kevent100 */
 	{
-		.sy_call = sys_nosys,
-	},		/* 502 = filler */
+		ns(struct sys_epoll_create1_args),
+		.sy_call = (sy_call_t *)sys_epoll_create1
+	},		/* 502 = epoll_create1 */
 	{
-		.sy_call = sys_nosys,
-	},		/* 503 = filler */
+		ns(struct sys_epoll_ctl_args),
+		.sy_flags = SYCALL_ARG_PTR,
+		.sy_call = (sy_call_t *)sys_epoll_ctl
+	},		/* 503 = epoll_ctl */
 	{
-		.sy_call = sys_nosys,
-	},		/* 504 = filler */
+		ns(struct sys_epoll_pwait2_args),
+		.sy_flags = SYCALL_ARG_PTR,
+		.sy_call = (sy_call_t *)sys_epoll_pwait2
+	},		/* 504 = epoll_pwait2 */
 	{
 		.sy_call = sys_nosys,
 	},		/* 505 = filler */

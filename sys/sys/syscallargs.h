@@ -3374,6 +3374,34 @@ struct sys___kevent100_args {
 };
 check_syscall_args(sys___kevent100)
 
+#ifndef RUMP_CLIENT
+struct sys_epoll_create1_args {
+	syscallarg(int) flags;
+};
+check_syscall_args(sys_epoll_create1)
+#endif /* !RUMP_CLIENT */
+
+#ifndef RUMP_CLIENT
+struct sys_epoll_ctl_args {
+	syscallarg(int) epfd;
+	syscallarg(int) op;
+	syscallarg(int) fd;
+	syscallarg(struct epoll_event *) event;
+};
+check_syscall_args(sys_epoll_ctl)
+#endif /* !RUMP_CLIENT */
+
+#ifndef RUMP_CLIENT
+struct sys_epoll_pwait2_args {
+	syscallarg(int) epfd;
+	syscallarg(struct epoll_event *) events;
+	syscallarg(int) maxevents;
+	syscallarg(const struct timespec *) timeout;
+	syscallarg(const sigset_t *) sigmask;
+};
+check_syscall_args(sys_epoll_pwait2)
+#endif /* !RUMP_CLIENT */
+
 /*
  * System call prototypes.
  */
@@ -4301,6 +4329,12 @@ int	sys_lpathconf(struct lwp *, const struct sys_lpathconf_args *, register_t *)
 int	sys_memfd_create(struct lwp *, const struct sys_memfd_create_args *, register_t *);
 
 int	sys___kevent100(struct lwp *, const struct sys___kevent100_args *, register_t *);
+
+int	sys_epoll_create1(struct lwp *, const struct sys_epoll_create1_args *, register_t *);
+
+int	sys_epoll_ctl(struct lwp *, const struct sys_epoll_ctl_args *, register_t *);
+
+int	sys_epoll_pwait2(struct lwp *, const struct sys_epoll_pwait2_args *, register_t *);
 
 #endif /* !RUMP_CLIENT */
 #endif /* _SYS_SYSCALLARGS_H_ */

@@ -24,6 +24,7 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include <sys/time.h>
 #include <compat/sys/time.h>
 #include <compat/linux/common/linux_types.h>
+#include <compat/linux/common/linux_misc.h>
 #include <compat/linux/common/linux_mmap.h>
 #include <compat/linux/common/linux_ipc.h>
 #include <compat/linux/common/linux_msg.h>

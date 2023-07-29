@@ -64,6 +64,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux_misc.c,v 1.256 2021/12/02 04:29:48 ryo Exp $")
 #include <sys/namei.h>
 #include <sys/proc.h>
 #include <sys/dirent.h>
+#include <sys/epoll.h>
 #include <sys/eventfd.h>
 #include <sys/file.h>
 #include <sys/stat.h>
@@ -180,6 +181,10 @@ static void linux_to_bsd_mmap_args(struct sys_mmap_args *,
 static int linux_mmap(struct lwp *, const struct linux_sys_mmap_args *,
     register_t *, off_t);
 static int linux_to_native_wait_options(int);
+static int
+linux_epoll_pwait2_common(struct lwp *l, register_t *retval, int epfd,
+    struct linux_epoll_event *events, int maxevents,
+    struct linux_timespec *timeout, const linux_sigset_t *sigmask);
 
 /*
  * The information on a terminated (or stopped) process needs
@@ -1827,4 +1832,231 @@ linux_sys_memfd_create(struct lwp *l, const struct linux_sys_memfd_create_args *
 	SCARG(&muap, flags) = lflags & LINUX_MFD_KNOWN_FLAGS;
 
 	return sys_memfd_create(l, &muap, retval);
+}
+
+/*
+ * epoll_create(2).  Check size and call sys_epoll_create1.
+ */
+int
+linux_sys_epoll_create(struct lwp *l,
+    const struct linux_sys_epoll_create_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) size;
+	} */
+	struct sys_epoll_create1_args ca;
+
+	/*
+	 * SCARG(uap, size) is unused.  Linux just tests it and then
+	 * forgets it as well.
+	 */
+	if (SCARG(uap, size) <= 0)
+		return EINVAL;
+
+	SCARG(&ca, flags) = 0;
+	return sys_epoll_create1(l, &ca, retval);
+}
+
+/*
+ * epoll_create1(2).  Translate the flags and call sys_epoll_create1.
+ */
+int
+linux_sys_epoll_create1(struct lwp *l,
+    const struct linux_sys_epoll_create1_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) flags;
+	} */
+	struct sys_epoll_create1_args ca;
+
+        if ((SCARG(uap, flags) & ~(LINUX_O_CLOEXEC)) != 0)
+		return EINVAL;
+
+	SCARG(&ca, flags) = 0;
+	if ((SCARG(uap, flags) & LINUX_O_CLOEXEC) != 0)
+		SCARG(&ca, flags) |= O_CLOEXEC;
+
+	return sys_epoll_create1(l, &ca, retval);
+}
+
+/*
+ * epoll_ctl(2).  Copyin event and translate it if necessary and then
+ * call epoll_ctl_common().
+ */
+int
+linux_sys_epoll_ctl(struct lwp *l, const struct linux_sys_epoll_ctl_args *uap,
+    register_t *retval)
+{
+	/* {
+		syscallarg(int) epfd;
+		syscallarg(int) op;
+		syscallarg(int) fd;
+		syscallarg(struct linux_epoll_event *) event;
+	} */
+	struct linux_epoll_event lee;
+	struct epoll_event ee;
+	struct epoll_event *eep;
+	int error;
+
+	if (SCARG(uap, op) != EPOLL_CTL_DEL) {
+		error = copyin(SCARG(uap, event), &lee, sizeof(lee));
+		if (error != 0)
+			return error;
+
+		/*
+		 * On some architectures, struct linux_epoll_event and
+		 * struct epoll_event are packed differently... but otherwise
+		 * the contents are the same.
+		 */
+		ee.events = lee.events;
+		ee.data = lee.data;
+
+		eep = &ee;
+	} else
+		eep = NULL;
+
+	return epoll_ctl_common(l, retval, SCARG(uap, epfd), SCARG(uap, op),
+	    SCARG(uap, fd), eep);
+}
+
+/*
+ * epoll_wait(2).  Call sys_epoll_pwait().
+ */
+int
+linux_sys_epoll_wait(struct lwp *l,
+    const struct linux_sys_epoll_wait_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) epfd;
+		syscallarg(struct linux_epoll_event *) events;
+		syscallarg(int) maxevents;
+		syscallarg(int) timeout;
+	} */
+	struct linux_sys_epoll_pwait_args ea;
+
+	SCARG(&ea, epfd) = SCARG(uap, epfd);
+	SCARG(&ea, events) = SCARG(uap, events);
+	SCARG(&ea, maxevents) = SCARG(uap, maxevents);
+	SCARG(&ea, timeout) = SCARG(uap, timeout);
+	SCARG(&ea, sigmask) = NULL;
+
+	return linux_sys_epoll_pwait(l, &ea, retval);
+}
+
+/*
+ * epoll_pwait(2).  Translate timeout and call sys_epoll_pwait2.
+ */
+int
+linux_sys_epoll_pwait(struct lwp *l,
+    const struct linux_sys_epoll_pwait_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) epfd;
+		syscallarg(struct linux_epoll_event *) events;
+		syscallarg(int) maxevents;
+		syscallarg(int) timeout;
+		syscallarg(linux_sigset_t *) sigmask;
+	} */
+        struct linux_timespec lts, *ltsp;
+	const int timeout = SCARG(uap, timeout);
+
+	if (timeout >= 0) {
+		/* Convert from milliseconds to timespec. */
+		lts.tv_sec = timeout / 1000;
+		lts.tv_nsec = (timeout % 1000) * 1000000;
+
+	        ltsp = &lts;
+	} else
+		ltsp = NULL;
+
+	return linux_epoll_pwait2_common(l, retval, SCARG(uap, epfd),
+	    SCARG(uap, events), SCARG(uap, maxevents), ltsp,
+	    SCARG(uap, sigmask));
+}
+
+/*
+ * Main body of epoll_pwait2(2).  Translate timeout and sigmask and
+ * call epoll_wait_common.
+ */
+static int
+linux_epoll_pwait2_common(struct lwp *l, register_t *retval, int epfd,
+    struct linux_epoll_event *events, int maxevents,
+    struct linux_timespec *timeout, const linux_sigset_t *sigmask)
+{
+	struct timespec ts, *tsp;
+	linux_sigset_t lss;
+	sigset_t ss, *ssp;
+	struct epoll_event *eep;
+	struct linux_epoll_event *leep;
+	int i, error;
+
+	if (maxevents <= 0)
+		return EINVAL;
+
+	if (timeout != NULL) {
+		linux_to_native_timespec(&ts, timeout);
+		tsp = &ts;
+	} else
+		tsp = NULL;
+
+	if (sigmask != NULL) {
+		error = copyin(sigmask, &lss, sizeof(lss));
+		if (error != 0)
+			return error;
+
+		linux_to_native_sigset(&ss, &lss);
+		ssp = &ss;
+	} else
+		ssp = NULL;
+
+	eep = kmem_alloc(maxevents * sizeof(*eep), KM_SLEEP);
+
+	error = epoll_wait_common(l, retval, epfd, eep, maxevents, tsp,
+	    ssp);
+	if (error == 0 && *retval > 0) {
+		leep = kmem_alloc((*retval) * sizeof(*leep), KM_SLEEP);
+
+		/* Translate the events (because of packing). */
+		for (i = 0; i < *retval; i++) {
+			leep[i].events = eep[i].events;
+			leep[i].data = eep[i].data;
+		}
+
+		error = copyout(leep, events, (*retval) * sizeof(*leep));
+		kmem_free(leep, (*retval) * sizeof(*leep));
+	}
+
+	kmem_free(eep, maxevents * sizeof(*eep));
+	return error;
+}
+
+/*
+ * epoll_pwait2(2).  Copyin timeout and call linux_epoll_pwait2_common().
+ */
+int
+linux_sys_epoll_pwait2(struct lwp *l,
+    const struct linux_sys_epoll_pwait2_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) epfd;
+		syscallarg(struct linux_epoll_event *) events;
+		syscallarg(int) maxevents;
+	        syscallarg(struct linux_timespec *) timeout;
+		syscallarg(linux_sigset_t *) sigmask;
+	} */
+	struct linux_timespec lts, *ltsp;
+	int error;
+
+	if (SCARG(uap, timeout) != NULL) {
+		error = copyin(SCARG(uap, timeout), &lts, sizeof(lts));
+		if (error != 0)
+			return error;
+
+		ltsp = &lts;
+	} else
+		ltsp = NULL;
+
+	return linux_epoll_pwait2_common(l, retval, SCARG(uap, epfd),
+	    SCARG(uap, events), SCARG(uap, maxevents), ltsp,
+	    SCARG(uap, sigmask));
 }
