@@ -102,10 +102,12 @@ sys_epoll_create1(struct lwp *l, const struct sys_epoll_create1_args *uap,
 	} */
 	struct sys_kqueue1_args kqa;
 
-	if ((SCARG(uap, flags) & ~(O_CLOEXEC)) != 0)
+	if ((SCARG(uap, flags) & ~(EPOLL_CLOEXEC)) != 0)
 		return EINVAL;
 
-	SCARG(&kqa, flags) = SCARG(uap, flags);
+	SCARG(&kqa, flags) = 0;
+	if (SCARG(uap, flags) & EPOLL_CLOEXEC)
+		SCARG(&kqa, flags) |= O_CLOEXEC;
 
 	return sys_kqueue1(l, &kqa, retval);
 }

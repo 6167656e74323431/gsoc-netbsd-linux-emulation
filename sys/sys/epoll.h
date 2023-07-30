@@ -29,9 +29,12 @@
 #ifndef _SYS_EPOLL_H_
 #define	_SYS_EPOLL_H_
 
+#include <sys/fcntl.h>			/* for O_CLOEXEC */
 #include <sys/types.h>			/* for uint32_t, uint64_t */
 #include <sys/sigtypes.h>		/* for sigset_t */
 struct timespec;
+
+#define	EPOLL_CLOEXEC	O_CLOEXEC
 
 #define	EPOLLIN		0x00000001
 #define	EPOLLPRI	0x00000002

@@ -1874,7 +1874,7 @@ linux_sys_epoll_create1(struct lwp *l,
 
 	SCARG(&ca, flags) = 0;
 	if ((SCARG(uap, flags) & LINUX_O_CLOEXEC) != 0)
-		SCARG(&ca, flags) |= O_CLOEXEC;
+		SCARG(&ca, flags) |= EPOLL_CLOEXEC;
 
 	return sys_epoll_create1(l, &ca, retval);
 }
