@@ -513,6 +513,9 @@
 /* syscall: "gettid" ret: "pid_t" args: */
 #define	LINUX_SYS_gettid	186
 
+/* syscall: "readahead" ret: "ssize_t" args: "int" "off_t" "size_t" */
+#define	LINUX_SYS_readahead	187
+
 /* syscall: "setxattr" ret: "int" args: "char *" "char *" "void *" "size_t" "int" */
 #define	LINUX_SYS_setxattr	188
 

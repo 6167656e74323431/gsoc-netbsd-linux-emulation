@@ -374,7 +374,8 @@
 184	UNIMPL		tuxcall
 185	UNIMPL		security
 186	STD		{ pid_t|linux_sys||gettid(void); }
-187	UNIMPL		readahead
+187	STD		{ ssize_t|linux_sys||readahead(int fd, off_t offset, \
+			    size_t count); }
 188	STD		{ int|linux_sys||setxattr(char *path, char *name, \
 			    void *value, size_t size, int flags); }
 189	STD		{ int|linux_sys||lsetxattr(char *path, char *name, \

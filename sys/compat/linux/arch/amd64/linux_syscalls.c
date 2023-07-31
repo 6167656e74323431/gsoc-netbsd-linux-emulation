@@ -254,7 +254,7 @@ const char *const linux_syscallnames[] = {
 	/* 184 */	"#184 (unimplemented tuxcall)",
 	/* 185 */	"#185 (unimplemented security)",
 	/* 186 */	"gettid",
-	/* 187 */	"#187 (unimplemented readahead)",
+	/* 187 */	"readahead",
 	/* 188 */	"setxattr",
 	/* 189 */	"lsetxattr",
 	/* 190 */	"fsetxattr",
@@ -798,7 +798,7 @@ const char *const altlinux_syscallnames[] = {
 	/* 184 */	NULL, /* unimplemented tuxcall */
 	/* 185 */	NULL, /* unimplemented security */
 	/* 186 */	NULL, /* gettid */
-	/* 187 */	NULL, /* unimplemented readahead */
+	/* 187 */	NULL, /* readahead */
 	/* 188 */	NULL, /* setxattr */
 	/* 189 */	NULL, /* lsetxattr */
 	/* 190 */	NULL, /* fsetxattr */
