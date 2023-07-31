@@ -1988,6 +1988,17 @@ systrace_args(register_t sysnum, const void *params, uintptr_t *uarg, size_t *n_
 		*n_args = 2;
 		break;
 	}
+	/* linux_sys_statx */
+	case 332: {
+		const struct linux_sys_statx_args *p = params;
+		iarg[0] = SCARG(p, fd); /* int */
+		uarg[1] = (intptr_t) SCARG(p, path); /* const char * */
+		iarg[2] = SCARG(p, flag); /* int */
+		uarg[3] = SCARG(p, mask); /* unsigned int */
+		uarg[4] = (intptr_t) SCARG(p, sp); /* struct linux_statx * */
+		*n_args = 5;
+		break;
+	}
 	/* linux_sys_epoll_pwait2 */
 	case 441: {
 		const struct linux_sys_epoll_pwait2_args *p = params;
@@ -5333,6 +5344,28 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			break;
 		};
 		break;
+	/* linux_sys_statx */
+	case 332:
+		switch(ndx) {
+		case 0:
+			p = "int";
+			break;
+		case 1:
+			p = "const char *";
+			break;
+		case 2:
+			p = "int";
+			break;
+		case 3:
+			p = "unsigned int";
+			break;
+		case 4:
+			p = "struct linux_statx *";
+			break;
+		default:
+			break;
+		};
+		break;
 	/* linux_sys_epoll_pwait2 */
 	case 441:
 		switch(ndx) {
@@ -6498,6 +6531,11 @@ systrace_return_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 		break;
 	/* linux_sys_memfd_create */
 	case 319:
+		if (ndx == 0 || ndx == 1)
+			p = "int";
+		break;
+	/* linux_sys_statx */
+	case 332:
 		if (ndx == 0 || ndx == 1)
 			p = "int";
 		break;

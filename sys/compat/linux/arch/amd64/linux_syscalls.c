@@ -399,7 +399,7 @@ const char *const linux_syscallnames[] = {
 	/* 329 */	"#329 (unimplemented pkey_mprotect)",
 	/* 330 */	"#330 (unimplemented pkey_alloc)",
 	/* 331 */	"#331 (unimplemented pkey_free)",
-	/* 332 */	"#332 (unimplemented statx)",
+	/* 332 */	"statx",
 	/* 333 */	"#333 (unimplemented io_pgetevents)",
 	/* 334 */	"#334 (unimplemented rseq)",
 	/* 335 */	"#335 (unimplemented)",
@@ -943,7 +943,7 @@ const char *const altlinux_syscallnames[] = {
 	/* 329 */	NULL, /* unimplemented pkey_mprotect */
 	/* 330 */	NULL, /* unimplemented pkey_alloc */
 	/* 331 */	NULL, /* unimplemented pkey_free */
-	/* 332 */	NULL, /* unimplemented statx */
+	/* 332 */	NULL, /* statx */
 	/* 333 */	NULL, /* unimplemented io_pgetevents */
 	/* 334 */	NULL, /* unimplemented rseq */
 	/* 335 */	NULL, /* unimplemented */

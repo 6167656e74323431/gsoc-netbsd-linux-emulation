@@ -595,7 +595,9 @@
 329	UNIMPL		pkey_mprotect
 330	UNIMPL		pkey_alloc
 331	UNIMPL		pkey_free
-332	UNIMPL		statx
+332     STD		{ int|linux_sys||statx(int fd, const char *path, \
+			    int flag, unsigned int mask, \
+			    struct linux_statx *sp); }
 333	UNIMPL		io_pgetevents
 334	UNIMPL		rseq
 335	UNIMPL
