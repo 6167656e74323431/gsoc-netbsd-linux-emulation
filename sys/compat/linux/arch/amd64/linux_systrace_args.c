@@ -1999,6 +1999,15 @@ systrace_args(register_t sysnum, const void *params, uintptr_t *uarg, size_t *n_
 		*n_args = 5;
 		break;
 	}
+	/* linux_sys_close_range */
+	case 436: {
+		const struct linux_sys_close_range_args *p = params;
+		uarg[0] = SCARG(p, first); /* unsigned int */
+		uarg[1] = SCARG(p, last); /* unsigned int */
+		uarg[2] = SCARG(p, flags); /* unsigned int */
+		*n_args = 3;
+		break;
+	}
 	/* linux_sys_epoll_pwait2 */
 	case 441: {
 		const struct linux_sys_epoll_pwait2_args *p = params;
@@ -5366,6 +5375,22 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			break;
 		};
 		break;
+	/* linux_sys_close_range */
+	case 436:
+		switch(ndx) {
+		case 0:
+			p = "unsigned int";
+			break;
+		case 1:
+			p = "unsigned int";
+			break;
+		case 2:
+			p = "unsigned int";
+			break;
+		default:
+			break;
+		};
+		break;
 	/* linux_sys_epoll_pwait2 */
 	case 441:
 		switch(ndx) {
@@ -6536,6 +6561,11 @@ systrace_return_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 		break;
 	/* linux_sys_statx */
 	case 332:
+		if (ndx == 0 || ndx == 1)
+			p = "int";
+		break;
+	/* linux_sys_close_range */
+	case 436:
 		if (ndx == 0 || ndx == 1)
 			p = "int";
 		break;

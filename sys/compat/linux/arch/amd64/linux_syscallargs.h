@@ -1187,6 +1187,13 @@ struct linux_sys_statx_args {
 };
 check_syscall_args(linux_sys_statx)
 
+struct linux_sys_close_range_args {
+	syscallarg(unsigned int) first;
+	syscallarg(unsigned int) last;
+	syscallarg(unsigned int) flags;
+};
+check_syscall_args(linux_sys_close_range)
+
 struct linux_sys_epoll_pwait2_args {
 	syscallarg(int) epfd;
 	syscallarg(struct linux_epoll_event *) events;
@@ -1682,6 +1689,8 @@ int	sys_getrandom(struct lwp *, const struct sys_getrandom_args *, register_t *)
 int	linux_sys_memfd_create(struct lwp *, const struct linux_sys_memfd_create_args *, register_t *);
 
 int	linux_sys_statx(struct lwp *, const struct linux_sys_statx_args *, register_t *);
+
+int	linux_sys_close_range(struct lwp *, const struct linux_sys_close_range_args *, register_t *);
 
 int	linux_sys_epoll_pwait2(struct lwp *, const struct linux_sys_epoll_pwait2_args *, register_t *);
 

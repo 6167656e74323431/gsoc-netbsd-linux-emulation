@@ -1781,8 +1781,9 @@ struct sysent linux_sysent[] = {
 		.sy_call = linux_sys_nosys,
 	},		/* 435 = filler */
 	{
-		.sy_call = linux_sys_nosys,
-	},		/* 436 = filler */
+		ns(struct linux_sys_close_range_args),
+		.sy_call = (sy_call_t *)linux_sys_close_range
+	},		/* 436 = close_range */
 	{
 		.sy_call = linux_sys_nosys,
 	},		/* 437 = filler */

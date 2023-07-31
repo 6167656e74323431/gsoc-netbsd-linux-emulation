@@ -701,7 +701,8 @@
 433	UNIMPL		fspick
 434	UNIMPL		pidfd_open
 435	UNIMPL		clone3
-436	UNIMPL		close_range
+436	STD		{ int|linux_sys||close_range(unsigned int first, \
+			    unsigned int last, unsigned int flags); }
 437	UNIMPL		openat2
 438	UNIMPL		pidfd_getfd
 439	UNIMPL		faccessat2

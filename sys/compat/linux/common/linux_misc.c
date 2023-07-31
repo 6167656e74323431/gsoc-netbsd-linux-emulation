@@ -2060,3 +2060,51 @@ linux_sys_epoll_pwait2(struct lwp *l,
 	    SCARG(uap, events), SCARG(uap, maxevents), ltsp,
 	    SCARG(uap, sigmask));
 }
+
+#define	LINUX_CLOSE_RANGE_UNSHARE	0x02U
+#define	LINUX_CLOSE_RANGE_CLOEXEC	0x04U
+
+/*
+ * close_range(2).
+ */
+int
+linux_sys_close_range(struct lwp *l,
+    const struct linux_sys_close_range_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(unsigned int) first;
+		syscallarg(unsigned int) last;
+		syscallarg(unsigned int) flags;
+	} */
+	unsigned int fd, last;
+	file_t *fp;
+	filedesc_t *fdp;
+	const unsigned int flags = SCARG(uap, flags);
+
+	if (flags & ~(LINUX_CLOSE_RANGE_CLOEXEC|LINUX_CLOSE_RANGE_UNSHARE))
+		return EINVAL;
+	if (SCARG(uap, first) > SCARG(uap, last))
+		return EINVAL;
+
+	if (flags & LINUX_CLOSE_RANGE_UNSHARE) {
+		fdp = fd_copy();
+		fd_free();
+	        l->l_proc->p_fd = fdp;
+	        l->l_fd = fdp;
+	}
+
+	last = MIN(SCARG(uap, last), l->l_proc->p_fd->fd_lastfile);
+	for (fd = SCARG(uap, first); fd <= last; fd++) {
+		fp = fd_getfile(fd);
+		if (fp == NULL)
+			continue;
+
+		if (flags & LINUX_CLOSE_RANGE_CLOEXEC) {
+			fd_set_exclose(l, fd, true);
+			fd_putfile(fd);
+		} else
+			fd_close(fd);
+	}
+
+	return 0;
+}

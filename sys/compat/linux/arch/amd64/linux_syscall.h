@@ -729,6 +729,9 @@
 /* syscall: "statx" ret: "int" args: "int" "const char *" "int" "unsigned int" "struct linux_statx *" */
 #define	LINUX_SYS_statx	332
 
+/* syscall: "close_range" ret: "int" args: "unsigned int" "unsigned int" "unsigned int" */
+#define	LINUX_SYS_close_range	436
+
 /* syscall: "epoll_pwait2" ret: "int" args: "int" "struct linux_epoll_event *" "int" "const struct linux_timespec *" "const linux_sigset_t *" */
 #define	LINUX_SYS_epoll_pwait2	441
 
