@@ -252,6 +252,10 @@ linux_statat(struct lwp *l, int fd, const char *path, int lflag,
 	int error, nd_flag;
 	uint8_t c;
 
+	if (lflag & ~(LINUX_AT_EMPTY_PATH|LINUX_AT_NO_AUTOMOUNT
+            |LINUX_AT_SYMLINK_NOFOLLOW))
+		return EINVAL;
+
 	if (lflag & LINUX_AT_EMPTY_PATH) {
 		/*
 		 * If path is null string:

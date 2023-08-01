@@ -221,19 +221,18 @@ typedef	__off_t		off_t;		/* file offset */
 #endif /* _NETBSD_SOURCE */
 
 #ifdef _KERNEL
+/* for NAME_MAX */
+#include <sys/syslimits.h>
 /* for struct timespec */
 #include <sys/timespec.h>
 /* for kmutex_t */
 #include <sys/mutex.h>
 
-#define MFD_NAME_MAX	255
-
 struct memfd {
-	char			mfd_name[MFD_NAME_MAX+1];
+	char			mfd_name[NAME_MAX+1];
 	struct uvm_object	*mfd_uobj;
 	size_t			mfd_size;
 	int			mfd_seals;
-	kmutex_t		mfd_lock;	/* for truncate */
 
 	struct timespec		mfd_btime;
 	struct timespec		mfd_atime;

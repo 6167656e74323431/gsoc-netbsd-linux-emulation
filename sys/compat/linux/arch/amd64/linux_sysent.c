@@ -24,6 +24,7 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include <sys/time.h>
 #include <compat/sys/time.h>
 #include <compat/linux/common/linux_types.h>
+#include <compat/linux/common/linux_misc.h>
 #include <compat/linux/common/linux_mmap.h>
 #include <compat/linux/common/linux_ipc.h>
 #include <compat/linux/common/linux_msg.h>
@@ -900,8 +901,10 @@ struct sysent linux_sysent[] = {
 		.sy_call = (sy_call_t *)linux_sys_gettid
 	},		/* 186 = gettid */
 	{
-		.sy_call = linux_sys_nosys,
-	},		/* 187 = filler */
+		ns(struct linux_sys_readahead_args),
+		.sy_flags = SYCALL_NARGS64_VAL(1) | SYCALL_ARG1_64,
+		.sy_call = (sy_call_t *)linux_sys_readahead
+	},		/* 187 = readahead */
 	{
 		ns(struct linux_sys_setxattr_args),
 		.sy_flags = SYCALL_ARG_PTR,
@@ -1470,8 +1473,10 @@ struct sysent linux_sysent[] = {
 		.sy_call = linux_sys_nosys,
 	},		/* 331 = filler */
 	{
-		.sy_call = linux_sys_nosys,
-	},		/* 332 = filler */
+		ns(struct linux_sys_statx_args),
+		.sy_flags = SYCALL_ARG_PTR,
+		.sy_call = (sy_call_t *)linux_sys_statx
+	},		/* 332 = statx */
 	{
 		.sy_call = linux_sys_nosys,
 	},		/* 333 = filler */
@@ -1782,8 +1787,9 @@ struct sysent linux_sysent[] = {
 		.sy_call = linux_sys_nosys,
 	},		/* 435 = filler */
 	{
-		.sy_call = linux_sys_nosys,
-	},		/* 436 = filler */
+		ns(struct linux_sys_close_range_args),
+		.sy_call = (sy_call_t *)linux_sys_close_range
+	},		/* 436 = close_range */
 	{
 		.sy_call = linux_sys_nosys,
 	},		/* 437 = filler */

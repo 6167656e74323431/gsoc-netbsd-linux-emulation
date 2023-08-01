@@ -64,6 +64,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux_misc.c,v 1.256 2021/12/02 04:29:48 ryo Exp $")
 #include <sys/namei.h>
 #include <sys/proc.h>
 #include <sys/dirent.h>
+#include <sys/epoll.h>
 #include <sys/eventfd.h>
 #include <sys/file.h>
 #include <sys/stat.h>
@@ -180,6 +181,10 @@ static void linux_to_bsd_mmap_args(struct sys_mmap_args *,
 static int linux_mmap(struct lwp *, const struct linux_sys_mmap_args *,
     register_t *, off_t);
 static int linux_to_native_wait_options(int);
+static int
+linux_epoll_pwait2_common(struct lwp *l, register_t *retval, int epfd,
+    struct linux_epoll_event *events, int maxevents,
+    struct linux_timespec *timeout, const linux_sigset_t *sigmask);
 
 /*
  * The information on a terminated (or stopped) process needs
@@ -1778,6 +1783,8 @@ linux_sys_eventfd2(struct lwp *l, const struct linux_sys_eventfd2_args *uap,
 				|LINUX_MFD_EXEC|LINUX_MFD_HUGE_FLAGS)
 #define LINUX_MFD_KNOWN_FLAGS	(LINUX_MFD_CLOEXEC|LINUX_MFD_ALLOW_SEALING)
 
+#define LINUX_MFD_NAME_MAX	249
+
 /*
  * memfd_create(2).  Do some error checking and then call NetBSD's
  * version.
@@ -1790,8 +1797,12 @@ linux_sys_memfd_create(struct lwp *l, const struct linux_sys_memfd_create_args *
 		syscallarg(const char *) name;
 		syscallarg(unsigned int) flags;
 	} */
+	int error;
+	char *pbuf;
 	struct sys_memfd_create_args muap;
 	const unsigned int lflags = SCARG(uap, flags);
+
+	KASSERT(LINUX_MFD_NAME_MAX < NAME_MAX); /* sanity check */
 
 	if (lflags & ~LINUX_MFD_ALL_FLAGS)
 		return EINVAL;
@@ -1801,12 +1812,331 @@ linux_sys_memfd_create(struct lwp *l, const struct linux_sys_memfd_create_args *
 	if ((lflags & LINUX_MFD_HUGETLB) && (lflags & LINUX_MFD_ALLOW_SEALING))
 		return EINVAL;
 
-	if (lflags & ~LINUX_MFD_KNOWN_FLAGS)
+	/* Linux has a stricter limit for name size */
+	pbuf = PNBUF_GET();
+	error = copyinstr(SCARG(uap, name), pbuf, LINUX_MFD_NAME_MAX+1, NULL);
+	PNBUF_PUT(pbuf);
+	pbuf = NULL;
+	if (error != 0) {
+		if (error == ENAMETOOLONG)
+			error = EINVAL;
+		return error;
+	}
+
+	if (lflags & ~LINUX_MFD_KNOWN_FLAGS) {
 		DPRINTF(("linux_sys_memfd_create: ignored flags %x\n",
 		    lflags & ~LINUX_MFD_KNOWN_FLAGS));
+	}
 
 	SCARG(&muap, name) = SCARG(uap, name);
 	SCARG(&muap, flags) = lflags & LINUX_MFD_KNOWN_FLAGS;
 
 	return sys_memfd_create(l, &muap, retval);
+}
+
+/*
+ * epoll_create(2).  Check size and call sys_epoll_create1.
+ */
+int
+linux_sys_epoll_create(struct lwp *l,
+    const struct linux_sys_epoll_create_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) size;
+	} */
+	struct sys_epoll_create1_args ca;
+
+	/*
+	 * SCARG(uap, size) is unused.  Linux just tests it and then
+	 * forgets it as well.
+	 */
+	if (SCARG(uap, size) <= 0)
+		return EINVAL;
+
+	SCARG(&ca, flags) = 0;
+	return sys_epoll_create1(l, &ca, retval);
+}
+
+/*
+ * epoll_create1(2).  Translate the flags and call sys_epoll_create1.
+ */
+int
+linux_sys_epoll_create1(struct lwp *l,
+    const struct linux_sys_epoll_create1_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) flags;
+	} */
+	struct sys_epoll_create1_args ca;
+
+        if ((SCARG(uap, flags) & ~(LINUX_O_CLOEXEC)) != 0)
+		return EINVAL;
+
+	SCARG(&ca, flags) = 0;
+	if ((SCARG(uap, flags) & LINUX_O_CLOEXEC) != 0)
+		SCARG(&ca, flags) |= EPOLL_CLOEXEC;
+
+	return sys_epoll_create1(l, &ca, retval);
+}
+
+/*
+ * epoll_ctl(2).  Copyin event and translate it if necessary and then
+ * call epoll_ctl_common().
+ */
+int
+linux_sys_epoll_ctl(struct lwp *l, const struct linux_sys_epoll_ctl_args *uap,
+    register_t *retval)
+{
+	/* {
+		syscallarg(int) epfd;
+		syscallarg(int) op;
+		syscallarg(int) fd;
+		syscallarg(struct linux_epoll_event *) event;
+	} */
+	struct linux_epoll_event lee;
+	struct epoll_event ee;
+	struct epoll_event *eep;
+	int error;
+
+	if (SCARG(uap, op) != EPOLL_CTL_DEL) {
+		error = copyin(SCARG(uap, event), &lee, sizeof(lee));
+		if (error != 0)
+			return error;
+
+		/*
+		 * On some architectures, struct linux_epoll_event and
+		 * struct epoll_event are packed differently... but otherwise
+		 * the contents are the same.
+		 */
+		ee.events = lee.events;
+		ee.data = lee.data;
+
+		eep = &ee;
+	} else
+		eep = NULL;
+
+	return epoll_ctl_common(l, retval, SCARG(uap, epfd), SCARG(uap, op),
+	    SCARG(uap, fd), eep);
+}
+
+/*
+ * epoll_wait(2).  Call sys_epoll_pwait().
+ */
+int
+linux_sys_epoll_wait(struct lwp *l,
+    const struct linux_sys_epoll_wait_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) epfd;
+		syscallarg(struct linux_epoll_event *) events;
+		syscallarg(int) maxevents;
+		syscallarg(int) timeout;
+	} */
+	struct linux_sys_epoll_pwait_args ea;
+
+	SCARG(&ea, epfd) = SCARG(uap, epfd);
+	SCARG(&ea, events) = SCARG(uap, events);
+	SCARG(&ea, maxevents) = SCARG(uap, maxevents);
+	SCARG(&ea, timeout) = SCARG(uap, timeout);
+	SCARG(&ea, sigmask) = NULL;
+
+	return linux_sys_epoll_pwait(l, &ea, retval);
+}
+
+/*
+ * epoll_pwait(2).  Translate timeout and call sys_epoll_pwait2.
+ */
+int
+linux_sys_epoll_pwait(struct lwp *l,
+    const struct linux_sys_epoll_pwait_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) epfd;
+		syscallarg(struct linux_epoll_event *) events;
+		syscallarg(int) maxevents;
+		syscallarg(int) timeout;
+		syscallarg(linux_sigset_t *) sigmask;
+	} */
+        struct linux_timespec lts, *ltsp;
+	const int timeout = SCARG(uap, timeout);
+
+	if (timeout >= 0) {
+		/* Convert from milliseconds to timespec. */
+		lts.tv_sec = timeout / 1000;
+		lts.tv_nsec = (timeout % 1000) * 1000000;
+
+	        ltsp = &lts;
+	} else
+		ltsp = NULL;
+
+	return linux_epoll_pwait2_common(l, retval, SCARG(uap, epfd),
+	    SCARG(uap, events), SCARG(uap, maxevents), ltsp,
+	    SCARG(uap, sigmask));
+}
+
+/*
+ * Main body of epoll_pwait2(2).  Translate timeout and sigmask and
+ * call epoll_wait_common.
+ */
+static int
+linux_epoll_pwait2_common(struct lwp *l, register_t *retval, int epfd,
+    struct linux_epoll_event *events, int maxevents,
+    struct linux_timespec *timeout, const linux_sigset_t *sigmask)
+{
+	struct timespec ts, *tsp;
+	linux_sigset_t lss;
+	sigset_t ss, *ssp;
+	struct epoll_event *eep;
+	struct linux_epoll_event *leep;
+	int i, error;
+
+	if (maxevents <= 0)
+		return EINVAL;
+
+	if (timeout != NULL) {
+		linux_to_native_timespec(&ts, timeout);
+		tsp = &ts;
+	} else
+		tsp = NULL;
+
+	if (sigmask != NULL) {
+		error = copyin(sigmask, &lss, sizeof(lss));
+		if (error != 0)
+			return error;
+
+		linux_to_native_sigset(&ss, &lss);
+		ssp = &ss;
+	} else
+		ssp = NULL;
+
+	eep = kmem_alloc(maxevents * sizeof(*eep), KM_SLEEP);
+
+	error = epoll_wait_common(l, retval, epfd, eep, maxevents, tsp,
+	    ssp);
+	if (error == 0 && *retval > 0) {
+		leep = kmem_alloc((*retval) * sizeof(*leep), KM_SLEEP);
+
+		/* Translate the events (because of packing). */
+		for (i = 0; i < *retval; i++) {
+			leep[i].events = eep[i].events;
+			leep[i].data = eep[i].data;
+		}
+
+		error = copyout(leep, events, (*retval) * sizeof(*leep));
+		kmem_free(leep, (*retval) * sizeof(*leep));
+	}
+
+	kmem_free(eep, maxevents * sizeof(*eep));
+	return error;
+}
+
+/*
+ * epoll_pwait2(2).  Copyin timeout and call linux_epoll_pwait2_common().
+ */
+int
+linux_sys_epoll_pwait2(struct lwp *l,
+    const struct linux_sys_epoll_pwait2_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) epfd;
+		syscallarg(struct linux_epoll_event *) events;
+		syscallarg(int) maxevents;
+	        syscallarg(struct linux_timespec *) timeout;
+		syscallarg(linux_sigset_t *) sigmask;
+	} */
+	struct linux_timespec lts, *ltsp;
+	int error;
+
+	if (SCARG(uap, timeout) != NULL) {
+		error = copyin(SCARG(uap, timeout), &lts, sizeof(lts));
+		if (error != 0)
+			return error;
+
+		ltsp = &lts;
+	} else
+		ltsp = NULL;
+
+	return linux_epoll_pwait2_common(l, retval, SCARG(uap, epfd),
+	    SCARG(uap, events), SCARG(uap, maxevents), ltsp,
+	    SCARG(uap, sigmask));
+}
+
+#define	LINUX_CLOSE_RANGE_UNSHARE	0x02U
+#define	LINUX_CLOSE_RANGE_CLOEXEC	0x04U
+
+/*
+ * close_range(2).
+ */
+int
+linux_sys_close_range(struct lwp *l,
+    const struct linux_sys_close_range_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(unsigned int) first;
+		syscallarg(unsigned int) last;
+		syscallarg(unsigned int) flags;
+	} */
+	unsigned int fd, last;
+	file_t *fp;
+	filedesc_t *fdp;
+	const unsigned int flags = SCARG(uap, flags);
+
+	if (flags & ~(LINUX_CLOSE_RANGE_CLOEXEC|LINUX_CLOSE_RANGE_UNSHARE))
+		return EINVAL;
+	if (SCARG(uap, first) > SCARG(uap, last))
+		return EINVAL;
+
+	if (flags & LINUX_CLOSE_RANGE_UNSHARE) {
+		fdp = fd_copy();
+		fd_free();
+	        l->l_proc->p_fd = fdp;
+	        l->l_fd = fdp;
+	}
+
+	last = MIN(SCARG(uap, last), l->l_proc->p_fd->fd_lastfile);
+	for (fd = SCARG(uap, first); fd <= last; fd++) {
+		fp = fd_getfile(fd);
+		if (fp == NULL)
+			continue;
+
+		if (flags & LINUX_CLOSE_RANGE_CLOEXEC) {
+			fd_set_exclose(l, fd, true);
+			fd_putfile(fd);
+		} else
+			fd_close(fd);
+	}
+
+	return 0;
+}
+
+/*
+ * readahead(2).  Call posix_fadvise with POSIX_FADV_WILLNEED with some extra
+ * error checking.
+ */
+int
+linux_sys_readahead(struct lwp *l, const struct linux_sys_readahead_args *uap,
+    register_t *retval)
+{
+	/* {
+		syscallarg(int) fd;
+		syscallarg(off_t) offset;
+		syscallarg(size_t) count;
+	} */
+	file_t *fp;
+	int error = 0;
+	const int fd = SCARG(uap, fd);
+
+	fp = fd_getfile(fd);
+	if (fp == NULL)
+		return EBADF;
+	if ((fp->f_flag & FREAD) == 0)
+		error = EBADF;
+	else if (fp->f_type != DTYPE_VNODE || fp->f_vnode->v_type != VREG)
+		error = EINVAL;
+	fd_putfile(fd);
+	if (error != 0)
+		return error;
+
+	return do_posix_fadvise(fd, SCARG(uap, offset), SCARG(uap, count),
+	    POSIX_FADV_WILLNEED);
 }

@@ -1,3 +1,32 @@
+/*-
+ * Copyright (c) 2023 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Theodore Preduta.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
 #include <sys/param.h>
 #include <sys/types.h>
 #include <sys/fcntl.h>
@@ -9,7 +38,9 @@
 #include <uvm/uvm_extern.h>
 #include <uvm/uvm_object.h>
 
-#define F_SEAL_ANY_WRITE (F_SEAL_WRITE|F_SEAL_FUTURE_WRITE)
+#define F_SEAL_ANY_WRITE	(F_SEAL_WRITE|F_SEAL_FUTURE_WRITE)
+#define MFD_KNOWN_SEALS		(F_SEAL_SEAL|F_SEAL_SHRINK|F_SEAL_GROW \
+				|F_SEAL_WRITE|F_SEAL_FUTURE_WRITE)
 
 static const char memfd_prefix[] = "memfd:";
 
@@ -25,6 +56,7 @@ static int memfd_mmap(file_t *fp, off_t *offp, size_t size, int prot,
     int *flagsp, int *advicep, struct uvm_object **uobjp, int *maxprotp);
 static int memfd_seek(file_t *fp, off_t delta, int whence,
     off_t *newoffp, int flags);
+static int do_memfd_truncate(file_t *fp, off_t length);
 static int memfd_truncate(file_t *fp, off_t length);
 
 static const struct fileops memfd_fileops = {
@@ -63,7 +95,7 @@ sys_memfd_create(struct lwp *l, const struct sys_memfd_create_args *uap,
 	struct proc *p = l->l_proc;
 	const unsigned int flags = SCARG(uap, flags);
 
-	KASSERT(MFD_NAME_MAX - sizeof(memfd_prefix) > 0); /* sanity check */
+	KASSERT(NAME_MAX - sizeof(memfd_prefix) > 0); /* sanity check */
 
 	if (flags & ~(MFD_CLOEXEC|MFD_ALLOW_SEALING))
 		return EINVAL;
@@ -71,16 +103,12 @@ sys_memfd_create(struct lwp *l, const struct sys_memfd_create_args *uap,
 	mfd = kmem_zalloc(sizeof(*mfd), KM_SLEEP);
 	mfd->mfd_size = 0;
 	mfd->mfd_uobj = uao_create(INT64_MAX - PAGE_SIZE, 0); /* same as tmpfs */
-	mutex_init(&mfd->mfd_lock, MUTEX_DEFAULT, IPL_NONE);
 
 	strcpy(mfd->mfd_name, memfd_prefix);
 	error = copyinstr(SCARG(uap, name), &mfd->mfd_name[sizeof(memfd_prefix)-1],
 	    sizeof(mfd->mfd_name) - sizeof(memfd_prefix), NULL);
-	if (error != 0) {
-		if (error == ENAMETOOLONG)
-			error = EINVAL;
+	if (error != 0)
 		goto leave;
-	}
 
 	getnanotime(&mfd->mfd_btime);
 
@@ -115,8 +143,7 @@ memfd_read(file_t *fp, off_t *offp, struct uio *uio, kauth_cred_t cred,
 	vsize_t todo;
 	struct memfd *mfd = fp->f_memfd;
 
-	if (offp == &fp->f_offset)
-		mutex_enter(&fp->f_lock);
+	mutex_enter(&fp->f_lock);
 
 	if (*offp < 0) {
 		error = EINVAL;
@@ -133,12 +160,13 @@ memfd_read(file_t *fp, off_t *offp, struct uio *uio, kauth_cred_t cred,
 	todo = MIN(uio->uio_resid, mfd->mfd_size - *offp);
 	error = ubc_uiomove(mfd->mfd_uobj, uio, todo, UVM_ADV_SEQUENTIAL,
 	    UBC_READ|UBC_PARTIALOK);
+	if (flags & FOF_UPDATE_OFFSET)
+		*offp = uio->uio_offset;
 
 leave:
-	if (offp == &fp->f_offset)
-		mutex_exit(&fp->f_lock);
-
 	getnanotime(&mfd->mfd_atime);
+
+	mutex_exit(&fp->f_lock);
 	
 	return error;
 }
@@ -151,11 +179,12 @@ memfd_write(file_t *fp, off_t *offp, struct uio *uio, kauth_cred_t cred,
 	vsize_t todo;
 	struct memfd *mfd = fp->f_memfd;
 
-	if (mfd->mfd_seals & F_SEAL_ANY_WRITE)
-		return EPERM;
+	mutex_enter(&fp->f_lock);
 
-	if (offp == &fp->f_offset)
-		mutex_enter(&fp->f_lock);
+	if (mfd->mfd_seals & F_SEAL_ANY_WRITE) {
+		error = EPERM;
+		goto leave;
+	}
 
 	if (*offp < 0) {
 		error = EINVAL;
@@ -176,19 +205,20 @@ memfd_write(file_t *fp, off_t *offp, struct uio *uio, kauth_cred_t cred,
 			todo = mfd->mfd_size - *offp;
 	} else if (*offp + uio->uio_resid >= mfd->mfd_size) {
 		/* Grow to accommodate the write request. */
-		error = memfd_truncate(fp, *offp + uio->uio_resid);
+		error = do_memfd_truncate(fp, *offp + uio->uio_resid);
 		if (error != 0)
 			goto leave;
 	}
 
 	error = ubc_uiomove(mfd->mfd_uobj, uio, todo, UVM_ADV_SEQUENTIAL,
 	    UBC_WRITE|UBC_PARTIALOK);
+	if (flags & FOF_UPDATE_OFFSET)
+		*offp = uio->uio_offset;
 
 	getnanotime(&mfd->mfd_mtime);
 
 leave:
-	if (offp == &fp->f_offset)
-		mutex_exit(&fp->f_lock);
+	mutex_exit(&fp->f_lock);
 
 	return error;
 }
@@ -203,6 +233,7 @@ static int
 memfd_fcntl(file_t *fp, u_int cmd, void *data)
 {
 	struct memfd *mfd = fp->f_memfd;
+	int error = 0;
 
 	switch (cmd) {
 	case F_GETPATH:
@@ -210,8 +241,17 @@ memfd_fcntl(file_t *fp, u_int cmd, void *data)
 		return 0;
 
 	case F_ADD_SEALS:
-		if (mfd->mfd_seals & F_SEAL_SEAL)
-			return EPERM;
+		mutex_enter(&fp->f_lock);
+
+		if (mfd->mfd_seals & F_SEAL_SEAL) {
+		        error = EPERM;
+			goto leave_add_seals;
+		}
+
+		if (*(int *)data & ~MFD_KNOWN_SEALS) {
+		        error = EINVAL;
+			goto leave_add_seals;
+		}
 
 		/*
 		 * Can only add F_SEAL_WRITE if there are no currently
@@ -222,18 +262,25 @@ memfd_fcntl(file_t *fp, u_int cmd, void *data)
 		 */
 		if ((mfd->mfd_seals & F_SEAL_WRITE) == 0 &&
 		    (*(int *)data & F_SEAL_WRITE) != 0 &&
-		    mfd->mfd_uobj->uo_refs > 1)
-			return EBUSY;
+		    mfd->mfd_uobj->uo_refs > 1) {
+			error = EBUSY;
+			goto leave_add_seals;
+		}
 
 	        mfd->mfd_seals |= *(int *)data;
-		return 0;
+
+	leave_add_seals:
+		mutex_exit(&fp->f_lock);
+		return error;
 
 	case F_GET_SEALS:
+		mutex_enter(&fp->f_lock);
 		*(int *)data = mfd->mfd_seals;
+		mutex_exit(&fp->f_lock);
 		return 0;
 
 	default:
-		return EOPNOTSUPP;
+		return EINVAL;
 	}
 }
 
@@ -241,6 +288,8 @@ static int
 memfd_stat(file_t *fp, struct stat *st)
 {
 	struct memfd *mfd = fp->f_memfd;
+
+	mutex_enter(&fp->f_lock);
 
 	memset(st, 0, sizeof(*st));
 	st->st_uid = kauth_cred_geteuid(fp->f_cred);
@@ -256,6 +305,8 @@ memfd_stat(file_t *fp, struct stat *st)
 	st->st_atimespec = mfd->mfd_atime;
 	st->st_mtimespec = mfd->mfd_mtime;
 
+	mutex_exit(&fp->f_lock);
+
 	return 0;
 }
 
@@ -265,7 +316,6 @@ memfd_close(file_t *fp)
 	struct memfd *mfd = fp->f_memfd;
 
 	uao_detach(mfd->mfd_uobj);
-	mutex_destroy(&mfd->mfd_lock);
 
 	kmem_free(mfd, sizeof(*mfd));
 	fp->f_memfd = NULL;
@@ -278,20 +328,29 @@ memfd_mmap(file_t *fp, off_t *offp, size_t size, int prot, int *flagsp,
     int *advicep, struct uvm_object **uobjp, int *maxprotp)
 {
 	struct memfd *mfd = fp->f_memfd;
+	int error = 0;
 
 	/* uvm_mmap guarantees page-aligned offset and size.  */
 	KASSERT(*offp == round_page(*offp));
 	KASSERT(size == round_page(size));
 	KASSERT(size > 0);
 
-	if (*offp < 0)
-		return EINVAL;
-	if (*offp + size > mfd->mfd_size)
-		return EINVAL;
+	mutex_enter(&fp->f_lock);
+
+	if (*offp < 0) {
+		error = EINVAL;
+		goto leave;
+	}
+	if (*offp + size > mfd->mfd_size) {
+		error = EINVAL;
+		goto leave;
+	}
 
 	if ((mfd->mfd_seals & F_SEAL_ANY_WRITE) &&
-	    (prot & VM_PROT_WRITE) && (*flagsp & MAP_PRIVATE) == 0)
-		return EPERM;
+	    (prot & VM_PROT_WRITE) && (*flagsp & MAP_PRIVATE) == 0) {
+		error = EPERM;
+		goto leave;
+	}
 
 	uao_reference(fp->f_memfd->mfd_uobj);
 	*uobjp = fp->f_memfd->mfd_uobj;
@@ -299,7 +358,10 @@ memfd_mmap(file_t *fp, off_t *offp, size_t size, int prot, int *flagsp,
 	*maxprotp = prot;
 	*advicep = UVM_ADV_RANDOM;
 
-	return 0;
+leave:
+	mutex_exit(&fp->f_lock);
+
+	return error;
 }
 
 static int
@@ -307,7 +369,9 @@ memfd_seek(file_t *fp, off_t delta, int whence, off_t *newoffp,
     int flags)
 {
 	off_t newoff;
-	int error;
+	int error = 0;
+
+	mutex_enter(&fp->f_lock);
 
 	switch (whence) {
 	case SEEK_CUR:
@@ -324,7 +388,7 @@ memfd_seek(file_t *fp, off_t delta, int whence, off_t *newoffp,
 
 	default:
 		error = EINVAL;
-		return error;
+		goto leave;
 	}
 
 	if (newoffp)
@@ -332,15 +396,20 @@ memfd_seek(file_t *fp, off_t delta, int whence, off_t *newoffp,
 	if (flags & FOF_UPDATE_OFFSET)
 		fp->f_offset = newoff;
 
-	return 0;
+leave:
+	mutex_exit(&fp->f_lock);
+
+	return error;
 }
 
 static int
-memfd_truncate(file_t *fp, off_t length)
+do_memfd_truncate(file_t *fp, off_t length)
 {
 	struct memfd *mfd = fp->f_memfd;
-	int error = 0;
 	voff_t start, end;
+	int error = 0;
+
+	KASSERT(mutex_owned(&fp->f_lock));
 
 	if (length < 0)
 		return EINVAL;
@@ -351,8 +420,6 @@ memfd_truncate(file_t *fp, off_t length)
 		return EPERM;
 	if ((mfd->mfd_seals & F_SEAL_GROW) && length > mfd->mfd_size)
 		return EPERM;
-
-	mutex_enter(&mfd->mfd_lock);
 
 	if (length > mfd->mfd_size)
 		ubc_zerorange(mfd->mfd_uobj, mfd->mfd_size,
@@ -372,6 +439,17 @@ memfd_truncate(file_t *fp, off_t length)
 
 	getnanotime(&mfd->mfd_mtime);
 	mfd->mfd_size = length;
-	mutex_exit(&mfd->mfd_lock);
+
+	return error;
+}
+
+static int
+memfd_truncate(file_t *fp, off_t length)
+{
+	int error;
+
+	mutex_enter(&fp->f_lock);
+	error = do_memfd_truncate(fp, length);
+	mutex_exit(&fp->f_lock);
 	return error;
 }

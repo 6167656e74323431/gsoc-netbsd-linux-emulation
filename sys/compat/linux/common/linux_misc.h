@@ -157,6 +157,15 @@ extern const int linux_fstypes_cnt;
  */
 #define linux_to_bsd_posix_fadv(advice) (advice)
 
+struct linux_epoll_event {
+	uint32_t	events;
+	uint64_t	data;
+}
+#if defined(__amd64__)
+__packed
+#endif
+;
+
 #ifdef _KERNEL
 __BEGIN_DECLS
 int bsd_to_linux_wstat(int);
