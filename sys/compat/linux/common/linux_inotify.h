@@ -48,7 +48,9 @@ struct linux_inotify_event {
 	char		name[];
 };
 
+#ifdef _KERNEL
 int linux_inotify_init(void);
 int linux_inotify_fini(void);
+#endif
 
 #endif	/* !_LINUX_EVENT_H */

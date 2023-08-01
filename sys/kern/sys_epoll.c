@@ -36,10 +36,7 @@
 #include <sys/file.h>
 #include <sys/filedesc.h>
 #include <sys/fcntl.h>
-#include <sys/poll.h>
 #include <sys/proc.h>
-#include <sys/selinfo.h>
-#include <sys/select.h>
 #include <sys/signal.h>
 #include <sys/vnode.h>
 
