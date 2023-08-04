@@ -1,5 +1,8 @@
-#ifndef _LINUX_EVENT_H
-#define	_LINUX_EVENT_H
+#ifndef _LINUX_INOTIFY_H
+#define	_LINUX_INOTIFY_H
+
+#include <sys/types.h>
+#include <compat/linux/common/linux_fcntl.h>
 
 #define LINUX_IN_CLOEXEC	LINUX_O_CLOEXEC
 #define LINUX_IN_NONBLOCK	LINUX_O_NONBLOCK
@@ -53,4 +56,4 @@ int linux_inotify_init(void);
 int linux_inotify_fini(void);
 #endif
 
-#endif	/* !_LINUX_EVENT_H */
+#endif	/* !_LINUX_INOTIFY_H */

@@ -1,0 +1,21 @@
+.include <bsd.own.mk>
+
+LDFLAGS=	-nostdlib -static
+CFLAGS=		-I${.CURDIR}/../../../sys
+CFLAGS+=	-I${.CURDIR}
+
+ARCHDIR=	${.CURDIR}/arch/${MACHINE_ARCH}
+
+PROGS=		tc_inotify_init
+#PROGS+=		tc_inotify_file_read
+
+.for _P in ${PROGS}
+SRCS.${_P}=	${.CURDIR}/${_P}.c
+SRCS.${_P}+=	${.CURDIR}/h_linux.c
+SRCS.${_P}+=	${ARCHDIR}/h_syscall.c
+MAN.${_P}?=	# empty
+.endfor
+
+# TODO elfedit(1) on the outputted test case binaries
+
+.include <bsd.prog.mk>
