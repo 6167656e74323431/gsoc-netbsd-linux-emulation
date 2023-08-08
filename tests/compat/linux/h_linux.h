@@ -1,18 +1,21 @@
 #ifndef	SRC_TESTS_COMPAT_LINUX_H_LINUX_H_
 #define	SRC_TESTS_COMPAT_LINUX_H_LINUX_H_
 
-#include <compat/linux/linux_syscall.h>
+#define _STANDALONE
+#include <sys/types.h>
+#undef _STANDALONE
 
-long	syscall(long number, ...);
+#define	syscall(number, ...)	syscall6(number, ## __VA_ARGS__, \
+				    0, 0, 0, 0, 0, 0)
 
-#define	RS(x)	if ((x) == -1) exit(errno);
+#define	RS(x)			if ((x) == -1) exit(errno);
 
 extern int errno;
 
-static inline void
-exit(int status)
-{
-	syscall(LINUX_SYS_exit, status);
-}
+long	syscall6(long number, register_t, register_t, register_t, register_t,
+	    register_t, register_t, ...);
+
+/* Convinience wrappers. */
+void	exit(int status);
 
 #endif /* !SRC_TESTS_COMPAT_LINUX_H_LINUX_H_ */
