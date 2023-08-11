@@ -5,16 +5,30 @@
 #include <sys/types.h>	/* For register_t. */
 #undef _STANDALONE
 
+#define	FAIL			(-1)
+
 #define	syscall(number, ...)	syscall6(number, ## __VA_ARGS__, \
 				    0, 0, 0, 0, 0, 0)
 
-#define	RS(x)			if ((x) == -1) exit(errno);
+#define	RS(x)			if ((x) == -1) exit(errno)
+#define	REQUIRE(x)		if (!(x)) exit(FAIL)
 
-/* Convinience wrappers. */
+/* Convinience wrappers for common syscalls. */
 #define	close(fd)		(int)syscall(LINUX_SYS_close, fd)
 #define	exit(status)		(void)syscall(LINUX_SYS_exit_group, status)
 #define	fcntl(fd, cmd, ...)	(int)syscall(LINUX_SYS_fcntl, fd, cmd, \
 					    ## __VA_ARGS__)
+#define	lseek(fd, off, whence)	(off_t)syscall(LINUX_SYS_lseek, fd, \
+				    (register_t)off, whence)
+#define	open(path, flags, ...)	(int)syscall(LINUX_SYS_open, \
+				    (register_t)path, flags, \
+				    ## __VA_ARGS__)
+#define	read(fd, buf, count)	(ssize_t)syscall(LINUX_SYS_read, fd, \
+				    (register_t)buf, count)
+#define	rename(from, to)	(int)syscall(LINUX_SYS___posix_rename, \
+				    (register_t)from, (register_t)to)
+#define	write(fd, buf, count)	(ssize_t)syscall(LINUX_SYS_write, fd, \
+				    (register_t)buf, count)
 
 long	syscall6(long number, register_t, register_t, register_t, register_t,
 	    register_t, register_t, ...);

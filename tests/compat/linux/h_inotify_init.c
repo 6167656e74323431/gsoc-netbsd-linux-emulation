@@ -12,26 +12,20 @@ _start(void)
 
 	/* Check that none of CLOEXEC or NONBLOCK are set. */
 	RS(fd = syscall(LINUX_SYS_inotify_init));
-	if (fcntl(fd, LINUX_F_GETFD) != 0)
-		exit(LINUX_EBADFD);
-	if ((fcntl(fd, LINUX_F_GETFL) & LINUX_O_NONBLOCK) != 0)
-		exit(LINUX_EBADFD);
+	REQUIRE(fcntl(fd, LINUX_F_GETFD) == 0);
+	REQUIRE((fcntl(fd, LINUX_F_GETFL) & LINUX_O_NONBLOCK) == 0);
 	RS(close(fd));
 
 	/* Check that only NONBLOCK is set. */
 	RS(fd = syscall(LINUX_SYS_inotify_init1, LINUX_IN_NONBLOCK));
-	if (fcntl(fd, LINUX_F_GETFD) != 0)
-		exit(LINUX_EBADFD);
-	if ((fcntl(fd, LINUX_F_GETFL) & LINUX_O_NONBLOCK) == 0)
-		exit(LINUX_EBADFD);
+	REQUIRE(fcntl(fd, LINUX_F_GETFD) == 0);
+	REQUIRE((fcntl(fd, LINUX_F_GETFL) & LINUX_O_NONBLOCK) != 0);
 	RS(close(fd));
 
 	/* Check that only CLOEXEC is set. */
 	RS(fd = syscall(LINUX_SYS_inotify_init1, LINUX_IN_CLOEXEC));
-	if (fcntl(fd, LINUX_F_GETFD) == 0)
-		exit(LINUX_EBADFD);
-	if ((fcntl(fd, LINUX_F_GETFL) & LINUX_O_NONBLOCK) != 0)
-		exit(LINUX_EBADFD);
+	REQUIRE(fcntl(fd, LINUX_F_GETFD) != 0);
+	REQUIRE((fcntl(fd, LINUX_F_GETFL) & LINUX_O_NONBLOCK) == 0);
 	RS(close(fd));
 
 	exit(0);

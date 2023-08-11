@@ -457,7 +457,7 @@ linux_sys_inotify_add_watch(struct lwp *l,
 				    __func__, i));
 				error = EBADF;
 			}
-			if (error != 0)
+			if (error == 0)
 				error = vn_stat(cur_fp->f_vnode, &cur_st);
 			fd_putfile(i);
 			if (error != 0)
@@ -505,10 +505,12 @@ linux_sys_inotify_add_watch(struct lwp *l,
 		    kn_selnext, tmpkn) {
 			if (kn->kn_fop == &inotify_filtops) {
 				mutex_enter(&kn->kn_kq->kq_lock);
+				wp->f_vnode->v_klist->vk_interest &= ~kn->kn_sfflags;
 				if (mask & LINUX_IN_MASK_ADD)
 					kn->kn_sfflags |= kev.fflags;
 				else
 					kn->kn_sfflags = kev.fflags;
+				wp->f_vnode->v_klist->vk_interest |= kn->kn_sfflags;
 				mutex_exit(&kn->kn_kq->kq_lock);
 			}
 		}
@@ -967,6 +969,16 @@ inotify_filt_event(struct knote *kn, long hint)
 
 	hint &= kn->kn_sfflags;
 	if (hint == 0)
+		return 0;
+
+	/*
+	 * Because we use kqueue() and file descriptors underneath,
+	 * functions like inotify_add_watch can actually trigger
+	 * events (ie. we're watching for LINUX_IN_OPEN).  In all
+	 * cases where this could happen, we must already own
+	 * ifd->ifd_lock, so we can just drop these events.
+	 */
+	if (mutex_owned(&ifd->ifd_lock))
 		return 0;
 
 	KASSERT(mutex_owned(vp->v_interlock));
