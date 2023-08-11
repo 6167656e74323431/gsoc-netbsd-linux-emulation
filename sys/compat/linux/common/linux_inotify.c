@@ -272,6 +272,8 @@ do_inotify_init(struct lwp *l, register_t *retval, int flags)
 		goto leave1;
 
 	fp->f_flag = FREAD;
+	if (flags & LINUX_IN_NONBLOCK)
+		fp->f_flag |= FNONBLOCK;
 	fp->f_type = DTYPE_MISC;
 	fp->f_ops = &inotify_fileops;
 	fp->f_data = ifd;
