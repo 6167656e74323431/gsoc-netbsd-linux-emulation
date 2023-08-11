@@ -2,6 +2,6 @@
 
 TESTSDIR=		${TESTSBASE}/compat
 
-TEST_SUBDIRS=		linux
+TESTS_SUBDIRS=		linux
 
 .include <bsd.test.mk>

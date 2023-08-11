@@ -210,6 +210,8 @@
 ./usr/tests/bin/sh/dotcmd/out
 ./usr/tests/bin/sleep
 ./usr/tests/bin/tar
+./usr/tests/compat
+./usr/tests/compat/linux
 ./usr/tests/crypto
 ./usr/tests/crypto/libcrypto
 ./usr/tests/crypto/opencrypto

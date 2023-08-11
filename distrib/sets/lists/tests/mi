@@ -1324,6 +1324,13 @@
 ./usr/tests/bin/tar/Atffile				tests-bin-tests		compattestfile,atf
 ./usr/tests/bin/tar/Kyuafile				tests-bin-tests		compattestfile,atf,kyua
 ./usr/tests/bin/tar/t_tar				tests-bin-tests		compattestfile,atf
+./usr/tests/compat					tests-compat-tests	compattestfile,atf
+./usr/tests/compat/Atffile				tests-compat-tests	compattestfile,atf
+./usr/tests/compat/linux				tests-compat-tests	compattestfile,atf
+./usr/tests/compat/linux/Atffile			tests-compat-tests	compattestfile,atf
+./usr/tests/compat/linux/t_inotify			tests-compat-tests	compattestfile,atf
+./usr/tests/compat/linux/tc_inotify_init		tests-compat-tests	compattestfile,atf
+./usr/tests/compat/linux/tc_inotify_file_read		tests-compat-tests	compattestfile,atf
 ./usr/tests/crypto					tests-crypto-tests	compattestfile,atf
 ./usr/tests/crypto/Atffile				tests-crypto-tests	compattestfile,atf
 ./usr/tests/crypto/Kyuafile				tests-crypto-tests	compattestfile,atf,kyua

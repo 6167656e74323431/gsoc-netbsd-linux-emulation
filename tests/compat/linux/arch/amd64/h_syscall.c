@@ -1,7 +1,5 @@
 #include "h_linux.h"
 
-#include <compat/linux/linux_syscall.h>
-
 long
 syscall6(long number, register_t arg1, register_t arg2, register_t arg3,
     register_t arg4, register_t arg5, register_t arg6, ...)

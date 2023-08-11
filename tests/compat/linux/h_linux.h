@@ -17,5 +17,6 @@ long	syscall6(long number, register_t, register_t, register_t, register_t,
 
 /* Convinience wrappers. */
 void	exit(int status);
+int	fcntl(int fd, int cmd, ...);
 
 #endif /* !SRC_TESTS_COMPAT_LINUX_H_LINUX_H_ */

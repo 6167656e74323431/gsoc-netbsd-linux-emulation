@@ -32,6 +32,11 @@
 #ifndef _LINUX_FCNTL_H
 #define _LINUX_FCNTL_H
 
+#ifdef _KERNEL
+#include <compat/linux/common/linux_types.h> /* For linux_off_t */
+struct stat;
+#endif
+
 /*
  * The arguments in the flock structure have a different order from the
  * BSD structure.
@@ -71,7 +76,7 @@ struct linux_flock64 {
 	off_t	    l_len;
 	linux_pid_t l_pid;
 };
-#endif /* !_KERNEL */
+#endif /* _KERNEL */
 
 #if defined(__i386__)
 #include <compat/linux/arch/i386/linux_fcntl.h>
@@ -174,6 +179,6 @@ LINUX##_to_bsd_##FLOCK(struct flock *bfp, const struct LINUX##_##FLOCK *lfp) \
 	LINUX##_to_bsd_##FLOCK(&bfl, &lfl); \
 	return do_fcntl_lock(fd, cmd == setlk ? F_SETLK : F_SETLKW, &bfl); \
     } while (0)
-#endif /* !_KERNEL */
+#endif /* _KERNEL */
 
 #endif /* !_LINUX_FCNTL_H */

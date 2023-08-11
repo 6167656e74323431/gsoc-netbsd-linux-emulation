@@ -2,7 +2,7 @@
 #define	_LINUX_INOTIFY_H
 
 #include <sys/types.h>
-#include <compat/linux/common/linux_fcntl.h>
+#include <compat/linux/common/linux_fcntl.h> /* for LINUX_O_CLOEXEC, LINUX_O_NONBLOCK */
 
 #define LINUX_IN_CLOEXEC	LINUX_O_CLOEXEC
 #define LINUX_IN_NONBLOCK	LINUX_O_NONBLOCK
