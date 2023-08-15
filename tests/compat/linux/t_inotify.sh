@@ -4,9 +4,8 @@ init_head() {
 }
 
 init_body() {
-
-	atf_check -s exit:0 \
-		"$(atf_get_srcdir)/h_inotify_init"
+	h_ensure_emul_exists
+	atf_check -s exit:0 "$(atf_get_srcdir)/h_inotify_init"
 }
 
 atf_test_case single_file
@@ -16,9 +15,8 @@ single_file_head() {
 }
 
 single_file_body() {
-
-	atf_check -s exit:0 \
-		"$(atf_get_srcdir)/h_inotify_single_file"
+	h_ensure_emul_exists
+	atf_check -s exit:0 "$(atf_get_srcdir)/h_inotify_single_file"
 }
 
 atf_test_case directory
@@ -28,9 +26,8 @@ directory_head() {
 }
 
 directory_body() {
-
-	atf_check -s exit:0 \
-		"$(atf_get_srcdir)/h_inotify_directory"
+	h_ensure_emul_exists
+	atf_check -s exit:0 "$(atf_get_srcdir)/h_inotify_directory"
 }
 
 atf_test_case watch_change
@@ -40,9 +37,8 @@ watch_change_head() {
 }
 
 watch_change_body() {
-
-	atf_check -s exit:0 \
-		"$(atf_get_srcdir)/h_inotify_watch_change"
+	h_ensure_emul_exists
+	atf_check -s exit:0 "$(atf_get_srcdir)/h_inotify_watch_change"
 }
 
 atf_init_test_cases() {

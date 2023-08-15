@@ -1,9 +1,7 @@
 #ifndef	SRC_TESTS_COMPAT_LINUX_H_LINUX_H_
 #define	SRC_TESTS_COMPAT_LINUX_H_LINUX_H_
 
-#define _STANDALONE
 #include <sys/types.h>	/* For register_t. */
-#undef _STANDALONE
 
 #define	FAIL			(-1)
 

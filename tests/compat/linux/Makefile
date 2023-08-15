@@ -13,8 +13,14 @@ TC_PROGS+=	h_inotify_watch_change
 LDFLAGS+=	-nostartfiles -static
 CFLAGS+=	-I${.CURDIR}/../../../sys
 CFLAGS+=	-I${.CURDIR}
+CFLAGS+=	-D_STANDALONE
 
 FILESDIR=	${TESTSDIR}
+
+.for _P in ${TESTS_SH}
+TESTS_SH_SRC_${_P}=	h_common.sh
+TESTS_SH_SRC_${_P}+=	${_P}.sh
+.endfor
 
 .for _P in ${TC_PROGS}
 PROGS+=			${_P}.out
