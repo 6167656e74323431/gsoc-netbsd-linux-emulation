@@ -10,8 +10,8 @@
 #define	syscall(number, ...)	syscall6(number, ## __VA_ARGS__, \
 				    0, 0, 0, 0, 0, 0)
 
-#define	RS(x)			if ((x) == -1) exit(errno)
-#define	REQUIRE(x)		if (!(x)) exit(FAIL)
+#define	RS(x)			do { if ((x) == -1) exit(errno); } while (0)
+#define	REQUIRE(x)		do { if (!(x)) exit(FAIL); } while (0)
 
 /* Convinience wrappers for common syscalls. */
 #define	close(fd)		(int)syscall(LINUX_SYS_close, fd)
@@ -29,10 +29,16 @@
 				    (register_t)buf, count)
 #define	rename(from, to)	(int)syscall(LINUX_SYS___posix_rename, \
 				    (register_t)from, (register_t)to)
+#define	rmdir(path)		(int)syscall(LINUX_SYS_rmdir, \
+				    (register_t)path)
 #define	unlink(path)		(int)syscall(LINUX_SYS_unlink, \
 				    (register_t)path)
 #define	write(fd, buf, count)	(ssize_t)syscall(LINUX_SYS_write, fd, \
 				    (register_t)buf, count)
+
+/* GCC builtins. */
+#define	strcmp(s1, s2)		__builtin_strcmp(s1, s2)
+#define	strlen(s)		__builtin_strlen(s)
 
 long	syscall6(long number, register_t, register_t, register_t, register_t,
 	    register_t, register_t, ...);

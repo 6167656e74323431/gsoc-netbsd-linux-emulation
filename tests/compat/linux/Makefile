@@ -6,10 +6,11 @@ TESTS_SH=	t_inotify
 .PATH: ${.CURDIR}/arch/${MACHINE}
 
 TC_PROGS=	h_inotify_init
+TC_PROGS+=	h_inotify_directory
 TC_PROGS+=	h_inotify_single_file
 TC_PROGS+=	h_inotify_watch_change
 
-LDFLAGS+=	-nostdlib -static
+LDFLAGS+=	-nostartfiles -static
 CFLAGS+=	-I${.CURDIR}/../../../sys
 CFLAGS+=	-I${.CURDIR}
 

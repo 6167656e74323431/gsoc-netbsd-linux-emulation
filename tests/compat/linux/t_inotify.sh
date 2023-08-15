@@ -21,6 +21,18 @@ single_file_body() {
 		"$(atf_get_srcdir)/h_inotify_single_file"
 }
 
+atf_test_case directory
+directory_head() {
+	atf_set "descr" \
+		"Tests correct events are generated when a directory is watched"
+}
+
+directory_body() {
+
+	atf_check -s exit:0 \
+		"$(atf_get_srcdir)/h_inotify_directory"
+}
+
 atf_test_case watch_change
 watch_change_head() {
 	atf_set "descr" \
@@ -35,6 +47,7 @@ watch_change_body() {
 
 atf_init_test_cases() {
 	atf_add_test_case init
+	atf_add_test_case directory
 	atf_add_test_case single_file
 	atf_add_test_case watch_change
 }
