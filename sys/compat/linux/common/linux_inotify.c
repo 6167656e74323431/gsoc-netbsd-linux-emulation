@@ -697,7 +697,7 @@ do_kevent_to_inotify(int32_t wd, uint32_t mask, uint32_t cookie,
 	buf->ie_event.cookie = cookie;
 
 	if (name != NULL) {
-		buf->ie_event.len = strlen(name);
+		buf->ie_event.len = strlen(name) + 1;
 		KASSERT(buf->ie_event.len < sizeof(buf->ie_name));
 		strcpy(buf->ie_name, name);
 	}
