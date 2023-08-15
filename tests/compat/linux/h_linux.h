@@ -17,9 +17,11 @@
 #define	close(fd)		(int)syscall(LINUX_SYS_close, fd)
 #define	exit(status)		(void)syscall(LINUX_SYS_exit_group, status)
 #define	fcntl(fd, cmd, ...)	(int)syscall(LINUX_SYS_fcntl, fd, cmd, \
-					    ## __VA_ARGS__)
+			            ## __VA_ARGS__)
 #define	lseek(fd, off, whence)	(off_t)syscall(LINUX_SYS_lseek, fd, \
 				    (register_t)off, whence)
+#define	mkdir(path, mode)	(int)syscall(LINUX_SYS_mkdir, \
+				    (register_t)path, mode)
 #define	open(path, flags, ...)	(int)syscall(LINUX_SYS_open, \
 				    (register_t)path, flags, \
 				    ## __VA_ARGS__)
@@ -27,6 +29,8 @@
 				    (register_t)buf, count)
 #define	rename(from, to)	(int)syscall(LINUX_SYS___posix_rename, \
 				    (register_t)from, (register_t)to)
+#define	unlink(path)		(int)syscall(LINUX_SYS_unlink, \
+				    (register_t)path)
 #define	write(fd, buf, count)	(ssize_t)syscall(LINUX_SYS_write, fd, \
 				    (register_t)buf, count)
 

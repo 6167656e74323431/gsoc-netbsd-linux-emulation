@@ -6,9 +6,9 @@
 #define	INOTIFY_ALL_FILE	(LINUX_IN_ATTRIB|LINUX_IN_CLOSE_NOWRITE \
 				|LINUX_IN_OPEN|LINUX_IN_MOVE_SELF \
 				|LINUX_IN_ACCESS|LINUX_IN_CLOSE_WRITE \
-				|LINUX_IN_MODIFY)
+				|LINUX_IN_MODIFY|LINUX_IN_DELETE_SELF)
 
-struct linux_inotify_event events[7];
+struct linux_inotify_event events[10];
 
 void
 _start(void)
@@ -20,7 +20,7 @@ _start(void)
 
 	RS(fd = syscall(LINUX_SYS_inotify_init));
 	RS(wd = syscall(LINUX_SYS_inotify_add_watch, fd, (register_t)"test",
-            INOTIFY_ALL_FILE));
+	    INOTIFY_ALL_FILE));
 
 	/* Create some events. */
 	RS(targetfd = open("test", LINUX_O_RDWR|LINUX_O_CREAT, 0644));
@@ -30,6 +30,7 @@ _start(void)
 	RS(targetfd = open("test", LINUX_O_RDONLY|LINUX_O_CREAT, 0644));
 	RS(close(targetfd));
 	RS(rename("test", "test2"));
+	RS(unlink("test2"));
 
 	/* Get and check the events. */
 	RS(read(fd, events, sizeof(events)));
@@ -45,6 +46,9 @@ _start(void)
 	REQUIRE(events[4].mask == LINUX_IN_OPEN);
 	REQUIRE(events[5].mask == LINUX_IN_CLOSE_NOWRITE);
 	REQUIRE(events[6].mask == LINUX_IN_MOVE_SELF);
+	REQUIRE(events[7].mask == LINUX_IN_ATTRIB);
+	REQUIRE(events[8].mask == LINUX_IN_DELETE_SELF);
+	REQUIRE(events[9].mask == LINUX_IN_IGNORED);
 
 	exit(0);
 }
