@@ -1,4 +1,4 @@
-/* $NetBSD: linux_systrace_args.c,v 1.4 2021/12/02 04:39:44 ryo Exp $ */
+/* $NetBSD$ */
 
 /*
  * System call argument to DTrace register array conversion.
@@ -165,6 +165,30 @@ systrace_args(register_t sysnum, const void *params, uintptr_t *uarg, size_t *n_
 		iarg[1] = SCARG(p, cmd); /* int */
 		uarg[2] = (intptr_t) SCARG(p, arg); /* void * */
 		*n_args = 3;
+		break;
+	}
+	/* linux_sys_inotify_init1 */
+	case 26: {
+		const struct linux_sys_inotify_init1_args *p = params;
+		iarg[0] = SCARG(p, flags); /* int */
+		*n_args = 1;
+		break;
+	}
+	/* linux_sys_inotify_add_watch */
+	case 27: {
+		const struct linux_sys_inotify_add_watch_args *p = params;
+		iarg[0] = SCARG(p, fd); /* int */
+		uarg[1] = (intptr_t) SCARG(p, pathname); /* const char * */
+		uarg[2] = SCARG(p, mask); /* uint32_t */
+		*n_args = 3;
+		break;
+	}
+	/* linux_sys_inotify_rm_watch */
+	case 28: {
+		const struct linux_sys_inotify_rm_watch_args *p = params;
+		iarg[0] = SCARG(p, fd); /* int */
+		iarg[1] = SCARG(p, wd); /* int */
+		*n_args = 2;
 		break;
 	}
 	/* linux_sys_ioctl */
@@ -1929,6 +1953,45 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			break;
 		case 2:
 			p = "void *";
+			break;
+		default:
+			break;
+		};
+		break;
+	/* linux_sys_inotify_init1 */
+	case 26:
+		switch(ndx) {
+		case 0:
+			p = "int";
+			break;
+		default:
+			break;
+		};
+		break;
+	/* linux_sys_inotify_add_watch */
+	case 27:
+		switch(ndx) {
+		case 0:
+			p = "int";
+			break;
+		case 1:
+			p = "const char *";
+			break;
+		case 2:
+			p = "uint32_t";
+			break;
+		default:
+			break;
+		};
+		break;
+	/* linux_sys_inotify_rm_watch */
+	case 28:
+		switch(ndx) {
+		case 0:
+			p = "int";
+			break;
+		case 1:
+			p = "int";
 			break;
 		default:
 			break;
@@ -4519,6 +4582,21 @@ systrace_return_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 		break;
 	/* linux_sys_fcntl */
 	case 25:
+		if (ndx == 0 || ndx == 1)
+			p = "int";
+		break;
+	/* linux_sys_inotify_init1 */
+	case 26:
+		if (ndx == 0 || ndx == 1)
+			p = "int";
+		break;
+	/* linux_sys_inotify_add_watch */
+	case 27:
+		if (ndx == 0 || ndx == 1)
+			p = "int";
+		break;
+	/* linux_sys_inotify_rm_watch */
+	case 28:
 		if (ndx == 0 || ndx == 1)
 			p = "int";
 		break;
