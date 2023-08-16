@@ -470,7 +470,9 @@
 275	UNIMPL		mq_notify
 276	UNIMPL		mq_getsetattr
 277	UNIMPL		vserve
-278	UNIMPL		waitid
+278     STD		{ int|linux_sys||waitid(int idtype, id_t id, \
+			    linux_siginfo_t *infop, int options, \
+			    struct rusage50 *rusage); }
 279	UNIMPL		setaltroot
 280	UNIMPL		add_key
 281	UNIMPL		request_key

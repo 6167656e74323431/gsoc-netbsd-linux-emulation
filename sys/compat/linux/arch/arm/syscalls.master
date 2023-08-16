@@ -467,7 +467,9 @@
 277	UNIMPL		mq_timedreceive
 278	UNIMPL		mq_notify
 279	UNIMPL		mq_getsetattr
-280	UNIMPL		waitid
+280     STD		{ int|linux_sys||waitid(int idtype, id_t id, \
+			    linux_siginfo_t *infop, int options, \
+			    struct rusage50 *rusage); }
 281	UNIMPL		socket
 282	UNIMPL		bind
 283	UNIMPL		connect
