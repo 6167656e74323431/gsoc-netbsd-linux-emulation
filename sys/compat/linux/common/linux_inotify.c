@@ -961,14 +961,28 @@ kevent_to_inotify(struct inotifyfd *ifd, int wd, enum vtype wtype,
 static int
 inotify_filt_event(struct knote *kn, long hint)
 {
-	struct inotifyfd *ifd = kn->kn_kevent.udata;
         struct vnode *vp = (struct vnode *)kn->kn_hook;
+	struct inotifyfd *ifd;
 	struct inotify_entry *cur_ie;
 	size_t nbuf, i;
+	uint32_t status;
 	struct inotify_entry buf[LINUX_INOTIFY_MAX_FROM_KEVENT];
 
-	hint &= kn->kn_sfflags;
-	if (hint == 0)
+	/*
+	 * If KN_WILLDETACH is set then
+	 * 1. kn->kn_kevent.udata has already been trashed with a
+	 *    struct lwp *, so we don't have access to a real ifd
+	 *    anymore, and
+	 * 2. we're about to detach anyways, so we don't really care
+	 *    about the events.
+	 * (Also because of this we need to get ifd under the same
+	 * lock as kn->kn_status.)
+	 */
+	mutex_enter(&kn->kn_kq->kq_lock);
+	status = kn->kn_status;
+	ifd = kn->kn_kevent.udata;
+	mutex_exit(&kn->kn_kq->kq_lock);
+	if (status & KN_WILLDETACH)
 		return 0;
 
 	/*
@@ -979,6 +993,14 @@ inotify_filt_event(struct knote *kn, long hint)
 	 * ifd->ifd_lock, so we can just drop these events.
 	 */
 	if (mutex_owned(&ifd->ifd_lock))
+		return 0;
+
+	/*
+	 * If we don't care about the NOTEs in hint, we don't generate
+	 * any events.
+	 */
+	hint &= kn->kn_sfflags;
+	if (hint == 0)
 		return 0;
 
 	KASSERT(mutex_owned(vp->v_interlock));
