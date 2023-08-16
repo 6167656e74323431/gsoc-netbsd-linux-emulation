@@ -1,4 +1,4 @@
-/* $NetBSD: linux_systrace_args.c,v 1.21 2021/12/02 04:39:45 ryo Exp $ */
+/* $NetBSD$ */
 
 /*
  * System call argument to DTrace register array conversion.
@@ -1715,6 +1715,17 @@ systrace_args(register_t sysnum, const void *params, uintptr_t *uarg, size_t *n_
 		iarg[2] = SCARG(p, len); /* off_t */
 		iarg[3] = SCARG(p, advice); /* int */
 		*n_args = 4;
+		break;
+	}
+	/* linux_sys_waitid */
+	case 280: {
+		const struct linux_sys_waitid_args *p = params;
+		iarg[0] = SCARG(p, idtype); /* int */
+		iarg[1] = SCARG(p, id); /* id_t */
+		uarg[2] = (intptr_t) SCARG(p, infop); /* linux_siginfo_t * */
+		iarg[3] = SCARG(p, options); /* int */
+		uarg[4] = (intptr_t) SCARG(p, rusage); /* struct rusage50 * */
+		*n_args = 5;
 		break;
 	}
 	/* linux_sys_openat */
@@ -4788,6 +4799,28 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			break;
 		};
 		break;
+	/* linux_sys_waitid */
+	case 280:
+		switch(ndx) {
+		case 0:
+			p = "int";
+			break;
+		case 1:
+			p = "id_t";
+			break;
+		case 2:
+			p = "linux_siginfo_t *";
+			break;
+		case 3:
+			p = "int";
+			break;
+		case 4:
+			p = "struct rusage50 *";
+			break;
+		default:
+			break;
+		};
+		break;
 	/* linux_sys_openat */
 	case 322:
 		switch(ndx) {
@@ -6381,6 +6414,11 @@ systrace_return_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 		break;
 	/* linux_sys_fadvise64_64 */
 	case 270:
+		if (ndx == 0 || ndx == 1)
+			p = "int";
+		break;
+	/* linux_sys_waitid */
+	case 280:
 		if (ndx == 0 || ndx == 1)
 			p = "int";
 		break;
