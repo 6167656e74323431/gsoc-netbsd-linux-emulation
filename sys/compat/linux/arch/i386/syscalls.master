@@ -478,9 +478,10 @@
 288	UNIMPL		keyctl
 289	UNIMPL		ioprio_set
 290	UNIMPL		ioprio_get
-291	UNIMPL		inotify_init
-292	UNIMPL		inotify_add_watch
-293	UNIMPL		inotify_rm_watch
+291     STD		{ int|linux_sys||inotify_init(void); }
+292     STD		{ int|linux_sys||inotify_add_watch(int fd, \
+			    const char *pathname, uint32_t mask); }
+293     STD		{ int|linux_sys||inotify_rm_watch(int fd, int wd); }
 294	UNIMPL		migrate_pages
 295	STD 		{ int|linux_sys||openat(int fd, const char *path, \
 			    int flags, ... linux_umode_t mode); }
@@ -545,7 +546,7 @@
 329	UNIMPL		epoll_create1
 330     STD             { int|linux_sys||dup3(int from, int to, int flags); }
 331     STD             { int|linux_sys||pipe2( int *pfds, int flags); }
-332	UNIMPL		inotify_init1
+332     STD		{ int|linux_sys||inotify_init1(int flags); }
 333	STD		{ int|linux_sys||preadv(int fd, \
 			    const struct iovec *iovp, int iovcnt, \
 			    unsigned long off_lo, unsigned long off_hi); }
