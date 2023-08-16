@@ -503,9 +503,9 @@ linux_sys_inotify_add_watch(struct lwp *l,
 		 */
 	        SLIST_FOREACH_SAFE(kn, &wp->f_vnode->v_klist->vk_klist,
 		    kn_selnext, tmpkn) {
-			if (kn->kn_fop == &inotify_filtops) {
+			if (kn->kn_fop == &inotify_filtops
+			    && ifd == kn->kn_kevent.udata) {
 				mutex_enter(&kn->kn_kq->kq_lock);
-				wp->f_vnode->v_klist->vk_interest &= ~kn->kn_sfflags;
 				if (mask & LINUX_IN_MASK_ADD)
 					kn->kn_sfflags |= kev.fflags;
 				else
@@ -1038,7 +1038,7 @@ inotify_filt_event(struct knote *kn, long hint)
 	}
 
 	if (nbuf > 0) {
-		cv_broadcast(&ifd->ifd_qcv);
+		cv_signal(&ifd->ifd_qcv);
 
 		mutex_enter(&ifd->ifd_lock);
 		selnotify(&ifd->ifd_sel, 0, 0);
@@ -1113,6 +1113,10 @@ inotify_read(file_t *fp, off_t *offp, struct uio *uio, kauth_cred_t cred,
 	}
 
 leave:
+	/* Wake up the next reader, if the queue is not empty. */
+	if (ifd->ifd_qcount > 0)
+		cv_signal(&ifd->ifd_qcv);
+
 	mutex_exit(&ifd->ifd_qlock);
 	return error;
 }
