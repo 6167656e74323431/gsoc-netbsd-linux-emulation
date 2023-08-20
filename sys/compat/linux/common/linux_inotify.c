@@ -131,8 +131,10 @@ static void	do_kevent_to_inotify(int32_t wd, uint32_t mask,
 static int	kevent_to_inotify(struct inotifyfd *ifd, int wd,
 		    enum vtype wtype, uint32_t flags, uint32_t fflags,
 		    struct inotify_entry *buf, size_t *nbuf);
-static int	inotify_readdir(file_t *fp, struct dirent *dep, int *done);
-static struct inotify_dir_entries *get_inotify_dir_entries(int wd);
+static int	inotify_readdir(file_t *fp, struct dirent *dep, int *done,
+		    bool needs_lock);
+static struct inotify_dir_entries *get_inotify_dir_entries(int wd,
+		    bool needs_lock);
 
 static int	inotify_filt_attach(struct knote *kn);
 static void	inotify_filt_detach(struct knote *kn);
@@ -574,7 +576,7 @@ linux_sys_inotify_add_watch(struct lwp *l,
 				ifd->ifd_nwds = wd+1;
 			}
 
-			ifd->ifd_wds[wd] = get_inotify_dir_entries(wd);
+			ifd->ifd_wds[wd] = get_inotify_dir_entries(wd, true);
 		}
 	}
 
@@ -735,11 +737,11 @@ do_kevent_to_inotify(int32_t wd, uint32_t mask, uint32_t cookie,
 }
 
 /*
- * Like vn_readdir(), but with vnode locking that depends on if we already have
- * v_interlock (to avoid double locking in some situations).
+ * Like vn_readdir(), but with vnode locking only if needs_lock is
+ * true (to avoid double locking in some situations).
  */
 static int
-inotify_readdir(file_t *fp, struct dirent *dep, int *done)
+inotify_readdir(file_t *fp, struct dirent *dep, int *done, bool needs_lock)
 {
 	struct vnode *vp;
 	struct iovec iov;
@@ -763,10 +765,10 @@ inotify_readdir(file_t *fp, struct dirent *dep, int *done)
 	uio.uio_offset = fp->f_offset;
 	mutex_exit(&fp->f_lock);
 
-	if (!mutex_owned(vp->v_interlock))
+	if (needs_lock)
 		vn_lock(vp, LK_SHARED | LK_RETRY);
 	error = VOP_READDIR(vp, &uio, fp->f_cred, &eofflag, NULL, NULL);
-	if (!mutex_owned(vp->v_interlock))
+	if (needs_lock)
 		VOP_UNLOCK(vp);
 
 	mutex_enter(&fp->f_lock);
@@ -780,10 +782,11 @@ inotify_readdir(file_t *fp, struct dirent *dep, int *done)
 /*
  * Create (and allocate) an appropriate inotify_dir_entries struct for wd to be
  * used on ifd_wds of inotifyfd.  If the entries on a directory fail to be read,
- * NULL is returned.
+ * NULL is returned.  needs_lock indicates if the vnode's lock is not already
+ * owned.
  */
 static struct inotify_dir_entries *
-get_inotify_dir_entries(int wd)
+get_inotify_dir_entries(int wd, bool needs_lock)
 {
 	struct dirent de;
 	struct dirent *currdep;
@@ -809,7 +812,7 @@ get_inotify_dir_entries(int wd)
 	mutex_exit(&wp->f_lock);
 	decount = 0;
 	for (;;) {
-		error = inotify_readdir(wp, &de, &done);
+		error = inotify_readdir(wp, &de, &done, needs_lock);
 		if (error != 0)
 			goto leave;
 		if (done == 0)
@@ -829,7 +832,7 @@ get_inotify_dir_entries(int wd)
 	wp->f_offset = 0;
 	mutex_exit(&wp->f_lock);
 	for (i = 0; i < decount;) {
-		error = inotify_readdir(wp, &de, &done);
+		error = inotify_readdir(wp, &de, &done, needs_lock);
 		if (error != 0 || done == 0) {
 			kmem_free(idep, INOTIFY_DIR_ENTRIES_SIZE(decount));
 			idep = NULL;
@@ -891,7 +894,7 @@ kevent_to_inotify(struct inotifyfd *ifd, int wd, enum vtype wtype,
 
 			old_idep = ifd->ifd_wds[wd];
 			KASSERT(old_idep != NULL);
-			new_idep = get_inotify_dir_entries(wd);
+			new_idep = get_inotify_dir_entries(wd, false);
 			if (new_idep == NULL)
 				DPRINTF(("%s: directory for wd=%d could not be read\n",
 				    __func__, wd));
