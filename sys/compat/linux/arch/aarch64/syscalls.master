@@ -103,9 +103,10 @@
 23	NOARGS		{ int|sys||dup(int fd); }
 24	STD		{ int|linux_sys||dup3(int from, int to, int flags); }
 25	STD		{ int|linux_sys||fcntl(int fd, int cmd, void *arg); }
-26	UNIMPL		inotify_init1
-27	UNIMPL		inotify_add_watch
-28	UNIMPL		inotify_rm_watch
+26	STD		{ int|linux_sys||inotify_init1(int flags); }
+27	STD	        { int|linux_sys||inotify_add_watch(int fd, \
+			    const char *pathname, uint32_t mask); }
+28	STD		{ int|linux_sys||inotify_rm_watch(int fd, int wd); }
 29	STD		{ int|linux_sys||ioctl(int fd, u_long com, \
 			    void *data); }
 30	UNIMPL		ioprio_set

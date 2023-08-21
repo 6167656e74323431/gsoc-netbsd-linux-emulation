@@ -959,6 +959,19 @@ struct linux_sys_waitid_args {
 };
 check_syscall_args(linux_sys_waitid)
 
+struct linux_sys_inotify_add_watch_args {
+	syscallarg(int) fd;
+	syscallarg(const char *) pathname;
+	syscallarg(uint32_t) mask;
+};
+check_syscall_args(linux_sys_inotify_add_watch)
+
+struct linux_sys_inotify_rm_watch_args {
+	syscallarg(int) fd;
+	syscallarg(int) wd;
+};
+check_syscall_args(linux_sys_inotify_rm_watch)
+
 struct linux_sys_openat_args {
 	syscallarg(int) fd;
 	syscallarg(const char *) path;
@@ -1133,6 +1146,11 @@ struct linux_sys_pipe2_args {
 	syscallarg(int) flags;
 };
 check_syscall_args(linux_sys_pipe2)
+
+struct linux_sys_inotify_init1_args {
+	syscallarg(int) flags;
+};
+check_syscall_args(linux_sys_inotify_init1)
 
 struct linux_sys_preadv_args {
 	syscallarg(int) fd;
@@ -1627,6 +1645,12 @@ int	compat_50_sys_utimes(struct lwp *, const struct compat_50_sys_utimes_args *,
 
 int	linux_sys_waitid(struct lwp *, const struct linux_sys_waitid_args *, register_t *);
 
+int	linux_sys_inotify_init(struct lwp *, const void *, register_t *);
+
+int	linux_sys_inotify_add_watch(struct lwp *, const struct linux_sys_inotify_add_watch_args *, register_t *);
+
+int	linux_sys_inotify_rm_watch(struct lwp *, const struct linux_sys_inotify_rm_watch_args *, register_t *);
+
 int	linux_sys_openat(struct lwp *, const struct linux_sys_openat_args *, register_t *);
 
 int	sys_mkdirat(struct lwp *, const struct sys_mkdirat_args *, register_t *);
@@ -1682,6 +1706,8 @@ int	linux_sys_epoll_create1(struct lwp *, const struct linux_sys_epoll_create1_a
 int	linux_sys_dup3(struct lwp *, const struct linux_sys_dup3_args *, register_t *);
 
 int	linux_sys_pipe2(struct lwp *, const struct linux_sys_pipe2_args *, register_t *);
+
+int	linux_sys_inotify_init1(struct lwp *, const struct linux_sys_inotify_init1_args *, register_t *);
 
 int	linux_sys_preadv(struct lwp *, const struct linux_sys_preadv_args *, register_t *);
 

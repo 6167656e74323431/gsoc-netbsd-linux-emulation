@@ -17,6 +17,7 @@ file	compat/linux/common/linux_exec_aout.c	compat_linux & exec_aout
 file	compat/linux/common/linux_fdio.c	compat_linux
 file	compat/linux/common/linux_file.c	compat_linux
 file	compat/linux/common/linux_hdio.c	compat_linux
+file	compat/linux/common/linux_inotify.c	compat_linux
 file	compat/linux/common/linux_ioctl.c	compat_linux
 file	compat/linux/common/linux_ipc.c		compat_linux
 file	compat/linux/common/linux_misc.c	compat_linux

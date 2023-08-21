@@ -503,9 +503,10 @@
 313	UNIMPL		vserver
 314	UNIMPL		ioptio_set
 315	UNIMPL		ioptio_get
-316	UNIMPL		inotify_init
-317	UNIMPL		inotify_add_watch
-318	UNIMPL		inotify_rm_watch
+316     STD		{ int|linux_sys||inotify_init(void); }
+317     STD		{ int|linux_sys||inotify_add_watch(int fd, \
+			    const char *pathname, uint32_t mask); }
+318     STD		{ int|linux_sys||inotify_rm_watch(int fd, int wd); }
 319	UNIMPL		mbind
 320	UNIMPL		get_mempolicy
 321	UNIMPL		set_mempolicy
@@ -578,7 +579,7 @@
 357	UNIMPL		epoll_create1
 358	STD		{ int|linux_sys||dup3(int from, int to, int flags); }
 359	STD		{ int|linux_sys||pipe2(int *pfds, int flags); }
-360	UNIMPL		inotify_init1
+360	STD		{ int|linux_sys||inotify_init1(int flags); }
 361	STD		{ int|linux_sys||preadv(int fd, \
 			    const struct iovec *iovp, int iovcnt, \
 			    unsigned long off_lo, unsigned long off_hi); }

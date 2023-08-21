@@ -624,6 +624,15 @@
 /* syscall: "waitid" ret: "int" args: "int" "id_t" "linux_siginfo_t *" "int" "struct rusage50 *" */
 #define	LINUX_SYS_waitid	247
 
+/* syscall: "inotify_init" ret: "int" args: */
+#define	LINUX_SYS_inotify_init	253
+
+/* syscall: "inotify_add_watch" ret: "int" args: "int" "const char *" "uint32_t" */
+#define	LINUX_SYS_inotify_add_watch	254
+
+/* syscall: "inotify_rm_watch" ret: "int" args: "int" "int" */
+#define	LINUX_SYS_inotify_rm_watch	255
+
 /* syscall: "openat" ret: "int" args: "int" "const char *" "int" "..." */
 #define	LINUX_SYS_openat	257
 
@@ -707,6 +716,9 @@
 
 /* syscall: "pipe2" ret: "int" args: "int *" "int" */
 #define	LINUX_SYS_pipe2	293
+
+/* syscall: "inotify_init1" ret: "int" args: "int" */
+#define	LINUX_SYS_inotify_init1	294
 
 /* syscall: "preadv" ret: "int" args: "int" "const struct iovec *" "int" "unsigned long" "unsigned long" */
 #define	LINUX_SYS_preadv	295

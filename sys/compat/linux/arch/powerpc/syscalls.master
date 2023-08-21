@@ -477,9 +477,10 @@
 272	UNIMPL		waitid
 273	UNIMPL		ioprio_set
 274	UNIMPL		ioprio_get
-275	UNIMPL		inotify_init
-276	UNIMPL		inotify_add_watch
-277	UNIMPL		inotify_rm_watch
+275     STD		{ int|linux_sys||inotify_init(void); }
+276     STD		{ int|linux_sys||inotify_add_watch(int fd, \
+			    const char *pathname, uint32_t mask); }
+277     STD		{ int|linux_sys||inotify_rm_watch(int fd, int wd); }
 278	UNIMPL		spu_run
 279	UNIMPL		spu_create
 280	STD		{ int|linux_sys||pselect6(int nfds, fd_set *readfds, \
@@ -551,7 +552,7 @@
 315	UNIMPL		epoll_create1
 316	STD		{ int|linux_sys||dup3(int from, int to, int flags); }
 317	STD		{ int|linux_sys||pipe2(int *pfds, int flags); }
-318	UNIMPL		inotify_init1
+318     STD		{ int|linux_sys||inotify_init1(int flags); }
 319	UNIMPL		perf_event_open
 320	STD		{ int|linux_sys||preadv(int fd, \
 			    const struct iovec *iovp, int iovcnt, \
