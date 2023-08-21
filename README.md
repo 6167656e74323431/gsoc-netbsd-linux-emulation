@@ -1,25 +1,49 @@
-# TODO
+# GSoC 2023: NetBSD Linux System Call Emulation: "A Tale of Two Binaries"
 
 TODO: description
 
-## Original Deliverables
+[Original proposal](https://www.pta.gg/assets/pdf/gsoc-proposal.pdf)
+[Full src diff](https://github.com/6167656e74323431/gsoc-netbsd-linux-emulation/compare/2f15c46...trunk)
+[full pkgsrc diff](https://github.com/6167656e74323431/gsoc-netbsd-linux-emulation/compare/b56696d...pkgsrc)
 
-| Goal | Status |
+## Deliverables
+
+The following table summarizes the status of the work as of 21 August 2023.
+
+| Deliverable | Status |
 |-|-|
-| Implement getrandom(2) | [Merged](https://github.com/NetBSD/src/commit/27c80d9318ef53cc2174ef8fc336fbc259961c12) |
-| Implement waitid(2) | [Done](https://github.com/6167656e74323431/gsoc-netbsd-linux-emulation/compare/f0258b8...waitid), not yet merged |
-| Implement epoll\_create(2), epoll\_create1(2), epoll\_ctl(2), epoll\_wait(2), epoll\_pwait(2), epoll\_pwait2(2) | [Merged](https://github.com/NetBSD/src/commit/4fc9de10f24b099fc6a64d7b6efb3326bf58fbc5) and then [partially removed](https://github.com/NetBSD/src/commit/97dbe1c5fc7aa60f1c4c372c605a235f626a25a6) |
-| Implement memfd\_create(2) | [Merged](https://github.com/NetBSD/src/commit/cb59abf3c3559fc4321683d63269288c48081e32) |
-| Implement inotify\_init(2), inotify\_init1(2), inotify\_add\_watch(2), inotify\_rm\_watch(2) | [Done](https://github.com/6167656e74323431/gsoc-netbsd-linux-emulation/compare/0f288b2...inotify), not yet merged |
-| Implement readahead(2) | [Merged](https://github.com/NetBSD/src/commit/107c20d04c3c0fe3f929df71fc5bcab4ba19c266) |
-| Implement newfstatat(2) | [Merged](https://github.com/NetBSD/src/commit/107c20d04c3c0fe3f929df71fc5bcab4ba19c266) |
-| Implement statx(2) | [Merged](https://github.com/NetBSD/src/commit/107c20d04c3c0fe3f929df71fc5bcab4ba19c266) |
-| Implement close\_range(2) | [Merged](https://github.com/NetBSD/src/commit/107c20d04c3c0fe3f929df71fc5bcab4ba19c266) |
+| Implement getrandom(2) | [Merged](https://github.com/NetBSD/src/commit/229b77042f914d6c0154fb10bfaba137ee2737b8) |
+| Implement waitid(2) | [Merged](https://github.com/NetBSD/src/commit/69e4d6a089c3506cf5ce6b44a6275ff36faa3d63) |
+| Implement epoll\_create(2), epoll\_create1(2), epoll\_ctl(2), epoll\_wait(2), epoll\_pwait(2), epoll\_pwait2(2) | [Merged](https://github.com/NetBSD/src/commit/d11110f47395fad20b98cd0acd8c15e342942014) ([also](https://github.com/NetBSD/src/commit/2c545067c78a4b84d16735051f9ff75bb33c88e8)) and then [partially removed](https://github.com/NetBSD/src/commit/e6ea8674241503ca267e91db470ee29fe4ae06f6) |
+| Implement memfd\_create(2) | [Merged](https://github.com/NetBSD/src/commit/7eace3da0cd50687e03e36df30a9c0ede7f6bfe1) ([also](https://github.com/NetBSD/src/commit/d3ba7ba3a2e5f7545ce6475eec2b87d28dd9bfe4), [also](https://github.com/NetBSD/src/commit/4ab15e90fbc652f184b4b666ebb03155e350998d)) |
+| Implement inotify\_init(2), inotify\_init1(2), inotify\_add\_watch(2), inotify\_rm\_watch(2) | [Merged](https://github.com/NetBSD/src/commit/8575c986c481647b7f22dad3ee667f50eaf55df9) ([also](https://github.com/NetBSD/src/commit/b7a2c5757f93ff98daa28e58c492788207b452cb), [also](https://github.com/NetBSD/src/commit/ed30ecde8c81e36f1ded305e04ea44118898d2e4)) |
+| Implement readahead(2) | [Merged](https://github.com/NetBSD/src/commit/a0a4eb1d2ef812bd289da9273c2bd475b6f3e30c) |
+| Implement newfstatat(2) | [Merged](https://github.com/NetBSD/src/commit/a0a4eb1d2ef812bd289da9273c2bd475b6f3e30c) |
+| Implement statx(2) | [Merged](https://github.com/NetBSD/src/commit/a0a4eb1d2ef812bd289da9273c2bd475b6f3e30c) |
+| Implement close\_range(2) | [Merged](https://github.com/NetBSD/src/commit/a0a4eb1d2ef812bd289da9273c2bd475b6f3e30c) |
 | Implement ioprio\_set(2) | Not feasible, NetBSD does not have an I/O scheduler |
 | Package the Linux Test Project | [Done](https://github.com/6167656e74323431/gsoc-netbsd-linux-emulation/compare/b56696d...pkgsrc), not yet merged |
+| Document system call versioning (extra) | [Merged](https://github.com/NetBSD/src/commit/e706571b76f3970eefc2e8eec0c848baa6681988) |
 
-## Extra Deliverables
+## Notes and Implementation Details
 
-| Goal | Status |
-|-|-|
-| Document system call versioning | [Merged](https://github.com/NetBSD/src/commit/c99712e08a47fec8aed5e9415d24f9dc0ab7d781) |
+memfd\_create(2) was implemented directly in terms of uvm(9) operations, in particular the backing is provided by a uvm\_object created by uao\_create(9).
+Since it was convenient, we also decided to make it a native NetBSD syscall.
+
+The epoll\_\*(2) syscalls were implemented by directly porting FreeBSD's Linux compatibility version.
+It is implemented as argument translation over kqueue(2)'s EVFILT\_READ and EVFILT\_WRITE, and so it necessitated versioning kqueue(2) to more closely match FreeBSD (hence why I also wrote a man page for syscall versioning).
+Unfortunately this design suffers from the limitation that an epoll file descriptor under Linux emulation will not survive a fork(2).
+After some [initial discussion](https://mail-index.netbsd.org/tech-kern/2023/06/21/msg028926.html) I decided to also add native NetBSD stubs to allow for better testing, but [proved to be controversial](https://mail-index.netbsd.org/tech-userlevel/2023/07/31/msg014063.html).
+Although despite this limitation, the epoll implementation is sufficient to allow a large swath of programs (ie. Go programs) to run.
+
+The inotify\_\*(2) syscalls were also implemented in terms of kqueue(2).
+TODO
+
+getrandom(2), waitid(2), readahead(2), and close\_range(2) have direct analogues in NetBSD, and so the implementation consists of translating arguments and calling the respective NetBSD functions.
+
+statx(2) and newfstatat(2) already existed, TODO.
+Besides fixing the bug, all that was necessary was to add the correct stubs to the relevant syscalls.master file.
+
+## What about the two binaries?
+
+TODO
