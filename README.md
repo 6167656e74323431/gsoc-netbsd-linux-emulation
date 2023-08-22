@@ -2,8 +2,8 @@
 
 TODO: description
 
-[Original proposal](https://www.pta.gg/assets/pdf/gsoc-proposal.pdf)
-[Full src diff](https://github.com/6167656e74323431/gsoc-netbsd-linux-emulation/compare/2f15c46...trunk)
+[original proposal](https://www.pta.gg/assets/pdf/gsoc-proposal.pdf)
+[full src diff](https://github.com/6167656e74323431/gsoc-netbsd-linux-emulation/compare/2f15c46...trunk)
 [full pkgsrc diff](https://github.com/6167656e74323431/gsoc-netbsd-linux-emulation/compare/b56696d...pkgsrc)
 
 ## Deliverables
@@ -21,7 +21,7 @@ The following table summarizes the status of the work as of 21 August 2023.
 | Implement newfstatat(2) | [Merged](https://github.com/NetBSD/src/commit/a0a4eb1d2ef812bd289da9273c2bd475b6f3e30c) |
 | Implement statx(2) | [Merged](https://github.com/NetBSD/src/commit/a0a4eb1d2ef812bd289da9273c2bd475b6f3e30c) |
 | Implement close\_range(2) | [Merged](https://github.com/NetBSD/src/commit/a0a4eb1d2ef812bd289da9273c2bd475b6f3e30c) |
-| Implement ioprio\_set(2) | Not feasible, NetBSD does not have an I/O scheduler |
+| Implement ioprio\_set(2) | Not feasible |
 | Package the Linux Test Project | [Done](https://github.com/6167656e74323431/gsoc-netbsd-linux-emulation/compare/b56696d...pkgsrc), not yet merged |
 | Document system call versioning (extra) | [Merged](https://github.com/NetBSD/src/commit/e706571b76f3970eefc2e8eec0c848baa6681988) |
 
@@ -29,20 +29,27 @@ The following table summarizes the status of the work as of 21 August 2023.
 
 memfd\_create(2) was implemented directly in terms of uvm(9) operations, in particular the backing is provided by a uvm\_object created by uao\_create(9).
 Since it was convenient, we also decided to make it a native NetBSD syscall.
+As was [pointed out](https://mail-index.netbsd.org/tech-kern/2023/08/11/msg029092.html), the memfd\_create(2) does not currently have any limits that can be imposed from the outside.
 
 The epoll\_\*(2) syscalls were implemented by directly porting FreeBSD's Linux compatibility version.
 It is implemented as argument translation over kqueue(2)'s EVFILT\_READ and EVFILT\_WRITE, and so it necessitated versioning kqueue(2) to more closely match FreeBSD (hence why I also wrote a man page for syscall versioning).
 Unfortunately this design suffers from the limitation that an epoll file descriptor under Linux emulation will not survive a fork(2).
-After some [initial discussion](https://mail-index.netbsd.org/tech-kern/2023/06/21/msg028926.html) I decided to also add native NetBSD stubs to allow for better testing, but [proved to be controversial](https://mail-index.netbsd.org/tech-userlevel/2023/07/31/msg014063.html).
+After some [initial discussion](https://mail-index.netbsd.org/tech-kern/2023/06/21/msg028926.html) I decided to also add native NetBSD stubs to allow for better testing, but this [proved to be controversial](https://mail-index.netbsd.org/tech-userlevel/2023/07/31/msg014063.html).
 Although despite this limitation, the epoll implementation is sufficient to allow a large swath of programs (ie. Go programs) to run.
 
 The inotify\_\*(2) syscalls were also implemented in terms of kqueue(2).
-TODO
+The main challenge with inotify is that it preserves the exact ordering events, which kqueue(2) does not.
+To accomplish this the implementation hooks into the event callbacks of kqueue(2), but uses its own queue.
+Since kqueue(2) attaches to file descriptors, which are a scarce resource, there are some events which this implementation will not generate (reading from files inside a watched directory).
+Additionally moves cannot always be correlated, so in some cases a rename may be reported as a delete and create, which is fine for its purpose as a compatibility shim.
+Finally as a bit of a hack, some of the operations have to be done by hand, instead of using filterops::f_touch because of the locking situation in the kqueue(2) subsystem..
 
 getrandom(2), waitid(2), readahead(2), and close\_range(2) have direct analogues in NetBSD, and so the implementation consists of translating arguments and calling the respective NetBSD functions.
 
-statx(2) and newfstatat(2) already existed, TODO.
+statx(2) and newfstatat(2) already existed, statx(2) had a bug and newfstatat(2) already existed, but under the name fstatat64(2) (the name changes based on the Linux architecture, but the functionality is otherwise the same).
 Besides fixing the bug, all that was necessary was to add the correct stubs to the relevant syscalls.master file.
+
+NetBSD does not currently have an I/O scheduler and so ioprio\_set(2) could not be feasibly implemented given the amount of time available (adding an I/O scheduler is an entire project).
 
 ## What about the two binaries?
 
