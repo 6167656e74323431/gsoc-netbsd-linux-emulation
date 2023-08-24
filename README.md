@@ -1,10 +1,9 @@
 # GSoC 2023: NetBSD Linux System Call Emulation: "A Tale of Two Binaries"
 
-TODO: description
+NetBSD's Linux system call (syscall) emulation provides near seamless ability to run Linux binaries, but traditionally it has been hard to answer the question "will it work with program X?"
+This Google Summer of Code Project aims to put a dent in that issue by taking a more systematic approach to syscall implementation and porting a comprehensive test suite (the [Linux Test Project](https://linux-test-project.github.io/)).
 
-[original proposal](https://www.pta.gg/assets/pdf/gsoc-proposal.pdf)
-[full src diff](https://github.com/6167656e74323431/gsoc-netbsd-linux-emulation/compare/2f15c46...trunk)
-[full pkgsrc diff](https://github.com/6167656e74323431/gsoc-netbsd-linux-emulation/compare/b56696d...pkgsrc)
+A full diff of the changes to the main source tree can be found [here](https://github.com/6167656e74323431/gsoc-netbsd-linux-emulation/compare/2f15c46...trunk), and a full diff of the main pkgsrc tree an be found [here](https://github.com/6167656e74323431/gsoc-netbsd-linux-emulation/compare/b56696d...pkgsrc).
 
 ## Deliverables
 
@@ -24,8 +23,12 @@ The following table summarizes the status of the work as of 21 August 2023.
 | Implement ioprio\_set(2) | Not feasible |
 | Package the Linux Test Project | [Done](https://github.com/6167656e74323431/gsoc-netbsd-linux-emulation/compare/b56696d...pkgsrc), not yet merged |
 | Document system call versioning (extra) | [Merged](https://github.com/NetBSD/src/commit/e706571b76f3970eefc2e8eec0c848baa6681988) |
+| Add support Linux emulation testing in ATF(7) (extra) | [Merged](https://github.com/NetBSD/src/commit/b7a2c5757f93ff98daa28e58c492788207b452cb) |
 
 ## Notes and Implementation Details
+
+As expected, many of the implementation plans from the [original proposal](https://www.pta.gg/assets/pdf/gsoc-proposal.pdf) turned out to be flawed.
+This section outlines how the syscalls were actually implemented, and some of the limitations of the implementations.
 
 memfd\_create(2) was implemented directly in terms of uvm(9) operations, in particular the backing is provided by a uvm\_object created by uao\_create(9).
 Since it was convenient, we also decided to make it a native NetBSD syscall.
@@ -42,7 +45,7 @@ The main challenge with inotify is that it preserves the exact ordering events, 
 To accomplish this the implementation hooks into the event callbacks of kqueue(2), but uses its own queue.
 Since kqueue(2) attaches to file descriptors, which are a scarce resource, there are some events which this implementation will not generate (reading from files inside a watched directory).
 Additionally moves cannot always be correlated, so in some cases a rename may be reported as a delete and create, which is fine for its purpose as a compatibility shim.
-Finally as a bit of a hack, some of the operations have to be done by hand, instead of using filterops::f_touch because of the locking situation in the kqueue(2) subsystem..
+Finally as a bit of a hack, some of the operations have to be done by hand, instead of using filterops::f_touch because of the locking situation in the kqueue(2) subsystem.
 
 getrandom(2), waitid(2), readahead(2), and close\_range(2) have direct analogues in NetBSD, and so the implementation consists of translating arguments and calling the respective NetBSD functions.
 
@@ -53,4 +56,7 @@ NetBSD does not currently have an I/O scheduler and so ioprio\_set(2) could not 
 
 ## What about the two binaries?
 
-TODO
+[Nebula](https://github.com/slackhq/nebula/) version 1.6.1 generally works, however the fact that TUN devices function differently on Linux limits its usefulness to just acting as a lighthouse and/or a relay.
+
+[Syncthing](https://syncthing.net/) version 1.23.7 works, it can reliably sync files.
+It does, however, emit a single warning on startup because of the non-existence of ioprio\_set(2).
