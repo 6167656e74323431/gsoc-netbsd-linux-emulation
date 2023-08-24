@@ -1,13 +1,14 @@
 # GSoC 2023: NetBSD Linux System Call Emulation: "A Tale of Two Binaries"
 
 NetBSD's Linux system call (syscall) emulation provides near seamless ability to run Linux binaries, but traditionally it has been hard to answer the question "will it work with program X?"
-This Google Summer of Code Project aims to put a dent in that issue by taking a more systematic approach to syscall implementation and porting a comprehensive test suite (the [Linux Test Project](https://linux-test-project.github.io/)).
+This Google Summer of Code Project aims to put a dent in that issue by taking a more systematic approach to syscall implementation by using real-world programs to gauge which syscalls are worth implementing, and not use them to decide when a syscall is done.
+Additionally, a comprehensive test suite (the [Linux Test Project](https://linux-test-project.github.io/)) was ported and support was added to test emulation using NetBSD's test suite (ATF(7)).
 
 A full diff of the changes to the main source tree can be found [here](https://github.com/6167656e74323431/gsoc-netbsd-linux-emulation/compare/2f15c46...trunk), and a full diff of the main pkgsrc tree an be found [here](https://github.com/6167656e74323431/gsoc-netbsd-linux-emulation/compare/b56696d...pkgsrc).
 
 ## Deliverables
 
-The following table summarizes the status of the work as of 21 August 2023.
+The following table summarizes the status of the deliverables from the [original proposal](https://www.pta.gg/assets/pdf/gsoc-proposal.pdf) as of 21 August 2023.
 
 | Deliverable | Status |
 |-|-|
@@ -45,7 +46,7 @@ The main challenge with inotify is that it preserves the exact ordering events, 
 To accomplish this the implementation hooks into the event callbacks of kqueue(2), but uses its own queue.
 Since kqueue(2) attaches to file descriptors, which are a scarce resource, there are some events which this implementation will not generate (reading from files inside a watched directory).
 Additionally moves cannot always be correlated, so in some cases a rename may be reported as a delete and create, which is fine for its purpose as a compatibility shim.
-Finally as a bit of a hack, some of the operations have to be done by hand, instead of using filterops::f_touch because of the locking situation in the kqueue(2) subsystem.
+Finally as a bit of a hack, some operations that could have gone through kevent1() to be done by hand because filterops::f\_touch could not be used due to the locking situation in the kqueue(2) subsystem (see [kqueue\_register](https://github.com/6167656e74323431/gsoc-netbsd-linux-emulation/blob/trunk/sys/kern/kern_event.c#L1981)).
 
 getrandom(2), waitid(2), readahead(2), and close\_range(2) have direct analogues in NetBSD, and so the implementation consists of translating arguments and calling the respective NetBSD functions.
 
