@@ -8,7 +8,7 @@ A full diff of the changes to the main source tree can be found [here](https://g
 
 ## Deliverables
 
-The following table summarizes the status of the deliverables from the [original proposal](https://www.pta.gg/assets/pdf/gsoc-proposal.pdf) as of 21 August 2023.
+The following table summarizes the status of the deliverables from the [original proposal](https://www.pta.gg/assets/pdf/gsoc-proposal.pdf) as of 25 August 2023.
 
 | Deliverable | Status |
 |-|-|
@@ -16,14 +16,14 @@ The following table summarizes the status of the deliverables from the [original
 | Implement waitid(2) | [Merged](https://github.com/NetBSD/src/commit/69e4d6a089c3506cf5ce6b44a6275ff36faa3d63) |
 | Implement epoll\_create(2), epoll\_create1(2), epoll\_ctl(2), epoll\_wait(2), epoll\_pwait(2), epoll\_pwait2(2) | [Merged](https://github.com/NetBSD/src/commit/d11110f47395fad20b98cd0acd8c15e342942014) ([also](https://github.com/NetBSD/src/commit/2c545067c78a4b84d16735051f9ff75bb33c88e8)) and then [partially removed](https://github.com/NetBSD/src/commit/e6ea8674241503ca267e91db470ee29fe4ae06f6) |
 | Implement memfd\_create(2) | [Merged](https://github.com/NetBSD/src/commit/7eace3da0cd50687e03e36df30a9c0ede7f6bfe1) ([also](https://github.com/NetBSD/src/commit/d3ba7ba3a2e5f7545ce6475eec2b87d28dd9bfe4), [also](https://github.com/NetBSD/src/commit/4ab15e90fbc652f184b4b666ebb03155e350998d)) |
-| Implement inotify\_init(2), inotify\_init1(2), inotify\_add\_watch(2), inotify\_rm\_watch(2) | [Merged](https://github.com/NetBSD/src/commit/8575c986c481647b7f22dad3ee667f50eaf55df9) ([also](https://github.com/NetBSD/src/commit/b7a2c5757f93ff98daa28e58c492788207b452cb), [also](https://github.com/NetBSD/src/commit/ed30ecde8c81e36f1ded305e04ea44118898d2e4)) |
+| Implement inotify\_init(2), inotify\_init1(2), inotify\_add\_watch(2), inotify\_rm\_watch(2) | [Merged](https://github.com/NetBSD/src/commit/8575c986c481647b7f22dad3ee667f50eaf55df9) ([also](https://github.com/NetBSD/src/commit/b7a2c5757f93ff98daa28e58c492788207b452cb), [also](https://github.com/NetBSD/src/commit/ed30ecde8c81e36f1ded305e04ea44118898d2e4), [also](https://github.com/NetBSD/src/commit/2915865e7d6b0827b7e94a15182426256c6c81dd)) |
 | Implement readahead(2) | [Merged](https://github.com/NetBSD/src/commit/a0a4eb1d2ef812bd289da9273c2bd475b6f3e30c) |
 | Implement newfstatat(2) | [Merged](https://github.com/NetBSD/src/commit/a0a4eb1d2ef812bd289da9273c2bd475b6f3e30c) |
 | Implement statx(2) | [Merged](https://github.com/NetBSD/src/commit/a0a4eb1d2ef812bd289da9273c2bd475b6f3e30c) |
 | Implement close\_range(2) | [Merged](https://github.com/NetBSD/src/commit/a0a4eb1d2ef812bd289da9273c2bd475b6f3e30c) |
 | Implement ioprio\_set(2) | Not feasible |
 | Package the Linux Test Project | [Done](https://github.com/6167656e74323431/gsoc-netbsd-linux-emulation/compare/b56696d...pkgsrc), not yet merged |
-| Document system call versioning (extra) | [Merged](https://github.com/NetBSD/src/commit/e706571b76f3970eefc2e8eec0c848baa6681988) |
+| Document system call versioning (extra) | [Merged](https://github.com/NetBSD/src/commit/e706571b76f3970eefc2e8eec0c848baa6681988) ([rendered](https://man.netbsd.org/versioningsyscalls.9)) |
 | Add support Linux emulation testing in ATF(7) (extra) | [Merged](https://github.com/NetBSD/src/commit/b7a2c5757f93ff98daa28e58c492788207b452cb) |
 
 ## Notes and Implementation Details
